@@ -1,0 +1,103 @@
+/* 全局样式 */
+:root {
+  --primary-color: #1890FF;
+  --success-color: #52c41a;
+  --warning-color: #faad14;
+  --danger-color: #ff4d4f;
+  --info-color: #722ed1;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 侧边栏菜单样式 */
+.el-menu {
+  border-right: none !important;
+}
+
+/* 标签页栏 */
+.tab-bar {
+  display: flex;
+  align-items: center;
+  background: #fff;
+  border-bottom: 1px solid #f0f0f0;
+  padding: 0 12px;
+  height: 36px;
+  overflow-x: auto;
+}
+
+.tab-item {
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  height: 28px;
+  font-size: 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+  margin-right: 4px;
+  color: #666;
+  transition: all 0.2s;
+}
+
+.tab-item:hover {
+  background: #f5f5f5;
+}
+
+.tab-item.active {
+  background: #e6f4ff;
+  color: var(--primary-color);
+}
+
+.tab-item .close-btn {
+  margin-left: 6px;
+  font-size: 10px;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.tab-item:hover .close-btn {
+  opacity: 1;
+}
+
+/* 页面内容区 */
+.page-content {
+  padding: 16px;
+  background: #f5f7fa;
+  min-height: calc(100vh - 100px);
+}
+
+/* 统计卡片 */
+.stat-card {
+  background: #fff;
+  border-radius: 8px;
+  padding: 20px;
+  transition: box-shadow 0.3s;
+}
+
+.stat-card:hover {
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+}
+
+/* 滚动条美化 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #d9d9d9;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #bfbfbf;
+}
