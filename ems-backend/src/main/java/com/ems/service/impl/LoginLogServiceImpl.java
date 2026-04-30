@@ -25,7 +25,7 @@ public class LoginLogServiceImpl extends ServiceImpl<LoginLogMapper, LoginLog> i
     }
 
     @Override
-    public void recordLogin(Long userId, String username, String ip, String userAgent, int status, String message) {
+    public void recordLogin(Long userId, String username, String ip, String userAgent, String status, String message) {
         LoginLog log = new LoginLog();
         log.setUserId(userId);
         log.setUsername(username);

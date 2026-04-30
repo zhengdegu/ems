@@ -8,5 +8,5 @@ public interface LoginLogService extends IService<LoginLog> {
 
     Page<LoginLog> listPage(int page, int pageSize, String keyword);
 
-    void recordLogin(Long userId, String username, String ip, String userAgent, int status, String message);
+    void recordLogin(Long userId, String username, String ip, String userAgent, String status, String message);
 }

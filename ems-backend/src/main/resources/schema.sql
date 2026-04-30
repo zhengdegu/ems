@@ -18,6 +18,8 @@ CREATE TABLE IF NOT EXISTS sys_user (
   avatar VARCHAR(255) DEFAULT NULL COMMENT '头像',
   role VARCHAR(20) DEFAULT 'user' COMMENT '角色',
   enabled TINYINT DEFAULT 1 COMMENT '是否启用',
+  lock_time DATETIME DEFAULT NULL COMMENT '锁定时间',
+  login_fail_count INT DEFAULT 0 COMMENT '登录失败次数',
   create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (id),
@@ -254,3 +256,20 @@ CREATE TABLE IF NOT EXISTS operation_log (
   KEY idx_module (module),
   KEY idx_create_time (create_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='操作日志表';
+
+-- ============================================
+-- 14. 附件表
+-- ============================================
+CREATE TABLE IF NOT EXISTS attachment (
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  file_name VARCHAR(255) NOT NULL COMMENT '原始文件名',
+  file_path VARCHAR(500) NOT NULL COMMENT '存储路径',
+  file_type VARCHAR(100) DEFAULT NULL COMMENT 'MIME类型',
+  file_size BIGINT DEFAULT NULL COMMENT '文件大小',
+  biz_type VARCHAR(50) DEFAULT NULL COMMENT '业务类型',
+  biz_id BIGINT DEFAULT NULL COMMENT '业务ID',
+  uploader VARCHAR(50) DEFAULT NULL COMMENT '上传人',
+  create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_biz (biz_type, biz_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='附件表';

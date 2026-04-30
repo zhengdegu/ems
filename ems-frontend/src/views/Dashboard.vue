@@ -55,7 +55,7 @@
         <div class="info-card">
           <div class="info-header">
             <h3 class="chart-title">实时预警</h3>
-            <el-link type="primary" :underline="false" @click="$router.push('/monitor/alarm')">查看全部 →</el-link>
+            <el-link type="primary" :underline="false" @click="$router.push('/alarm')">查看全部 →</el-link>
           </div>
           <div class="alarm-list">
             <div
@@ -118,11 +118,12 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import * as echarts from 'echarts'
-import { getDashboardOverview } from '../api/dashboard'
+import { getDashboardOverview, getEquipmentDistribution } from '../api/dashboard'
 import { getAlarmList } from '../api/alarm'
 import { getWorkOrderList } from '../api/workOrder'
+import wsClient from '../utils/websocket'
 
 const trendChartRef = ref()
 const pieChartRef = ref()
@@ -131,36 +132,23 @@ let charts = []
 
 // KPI 卡片数据
 const kpiCards = ref([
-  { label: '设备总数', value: '2,847', unit: '', trend: '12.5%', trendUp: true, trendLabel: '较上月', color: '#1890FF', iconBg: '#e6f4ff', icon: 'Monitor' },
-  { label: '在线率', value: '96.8', unit: '%', trend: '2.1%', trendUp: true, trendLabel: '较上月', color: '#52c41a', iconBg: '#f6ffed', icon: 'Connection' },
-  { label: '故障率', value: '1.2', unit: '%', trend: '0.3%', trendUp: false, trendLabel: '较上月', color: '#ff4d4f', iconBg: '#fff2f0', icon: 'WarnTriangleFilled' },
-  { label: '待维护', value: '156', unit: '', trend: '8 台', trendUp: true, trendLabel: '新增待维护', color: '#faad14', iconBg: '#fffbe6', icon: 'SetUp' }
+  { label: '设备总数', value: '0', unit: '', trend: '-', trendUp: true, trendLabel: '', color: '#1890FF', iconBg: '#e6f4ff', icon: 'Monitor' },
+  { label: '在线率', value: '0', unit: '%', trend: '-', trendUp: true, trendLabel: '', color: '#52c41a', iconBg: '#f6ffed', icon: 'Connection' },
+  { label: '故障率', value: '0', unit: '%', trend: '-', trendUp: false, trendLabel: '', color: '#ff4d4f', iconBg: '#fff2f0', icon: 'WarnTriangleFilled' },
+  { label: '待维护', value: '0', unit: '', trend: '-', trendUp: true, trendLabel: '', color: '#faad14', iconBg: '#fffbe6', icon: 'SetUp' }
 ])
 
 // 预警列表
-const alarmList = ref([
-  { title: 'CNC-A003 主轴温度异常', area: 'A区', time: '3分钟前', type: 'danger', levelText: '紧急' },
-  { title: 'PLC-B012 通信延迟过高', area: 'B区', time: '15分钟前', type: 'warning', levelText: '警告' },
-  { title: 'AGV-C005 电池电量低于20%', area: 'C区', time: '28分钟前', type: 'warning', levelText: '警告' },
-  { title: 'ROBOT-D008 即将到达保养周期', area: 'D区', time: '1小时前', type: 'info', levelText: '提示' }
-])
+const alarmList = ref([])
 
 // 待办事项
-const todoList = ref([
-  { title: '处理CNC-A003故障工单', priority: '紧急', deadline: '今天 18:00', icon: 'SetUp', iconColor: '#ff4d4f', iconBg: '#fff2f0' },
-  { title: '审批设备采购申请 #2024-0312', priority: '高', deadline: '明天 12:00', icon: 'Document', iconColor: '#faad14', iconBg: '#fffbe6' },
-  { title: 'B区设备季度巡检', priority: '中', deadline: '03-15', icon: 'Calendar', iconColor: '#1890FF', iconBg: '#e6f4ff' },
-  { title: '提交2月设备运行月报', priority: '中', deadline: '03-10', icon: 'Document', iconColor: '#52c41a', iconBg: '#f6ffed' }
-])
+const todoList = ref([])
 
 // 区域分布
-const areaList = ref([
-  { name: 'A区 - 精密加工车间', count: 486, percent: 68, color: '#1890FF' },
-  { name: 'B区 - 装配车间', count: 392, percent: 55, color: '#52c41a' },
-  { name: 'C区 - 仓储物流', count: 328, percent: 46, color: '#faad14' },
-  { name: 'D区 - 焊接车间', count: 275, percent: 38, color: '#1890FF' },
-  { name: 'E区 - 检测中心', count: 186, percent: 26, color: '#722ed1' }
-])
+const areaList = ref([])
+
+// 饼图数据（从 API 获取后更新）
+const pieData = ref([])
 
 // 加载 API 数据
 async function loadDashboardData() {
@@ -168,12 +156,60 @@ async function loadDashboardData() {
     const res = await getDashboardOverview()
     if (res.code === 200 && res.data) {
       const d = res.data
-      if (d.totalEquipment !== undefined) {
-        kpiCards.value[0].value = (d.totalEquipment ?? 2847).toLocaleString()
+      const total = d.totalEquipment || 0
+      const running = d.runningCount || 0
+      const fault = d.faultCount || 0
+      const maintenance = d.maintenanceCount || 0
+      const onlineRate = d.onlineRate !== undefined ? d.onlineRate : (total > 0 ? (running / total * 100).toFixed(1) : 0)
+      const faultRate = d.faultRate !== undefined ? d.faultRate : (total > 0 ? (fault / total * 100).toFixed(1) : 0)
+
+      kpiCards.value[0].value = total.toLocaleString()
+      kpiCards.value[0].trend = `运行 ${running}`
+      kpiCards.value[0].trendLabel = `故障 ${fault}`
+
+      kpiCards.value[1].value = String(onlineRate)
+      kpiCards.value[1].trend = `${running}/${total}`
+      kpiCards.value[1].trendLabel = '运行/总数'
+
+      kpiCards.value[2].value = String(faultRate)
+      kpiCards.value[2].trend = `${fault} 台`
+      kpiCards.value[2].trendLabel = '故障设备'
+
+      kpiCards.value[3].value = String(d.pendingMaintenance || maintenance)
+      kpiCards.value[3].trend = `${d.pendingWorkOrders || 0} 单`
+      kpiCards.value[3].trendLabel = '待处理工单'
+
+      // 设备分类统计 - 更新饼图
+      if (d.equipmentByType) {
+        const colors = ['#1890FF', '#36cfc9', '#faad14', '#722ed1', '#13c2c2', '#9ca3af', '#ff4d4f', '#52c41a']
+        pieData.value = Object.entries(d.equipmentByType).map(([name, value], i) => ({
+          value,
+          name,
+          itemStyle: { color: colors[i % colors.length] }
+        }))
+        updatePieChart()
       }
     }
   } catch {
-    // 使用默认演示数据
+    // 使用默认数据
+  }
+
+  // 加载区域分布
+  try {
+    const distRes = await getEquipmentDistribution()
+    if (distRes.code === 200 && distRes.data?.byLocation) {
+      const locations = distRes.data.byLocation
+      const maxCount = Math.max(...Object.values(locations), 1)
+      const colors = ['#1890FF', '#52c41a', '#faad14', '#722ed1', '#13c2c2', '#ff4d4f']
+      areaList.value = Object.entries(locations).map(([name, count], i) => ({
+        name,
+        count,
+        percent: Math.round(count / maxCount * 100),
+        color: colors[i % colors.length]
+      }))
+    }
+  } catch {
+    // 使用默认数据
   }
 
   try {
@@ -184,11 +220,11 @@ async function loadDashboardData() {
         area: a.area || '',
         time: a.createTime || '',
         type: a.level === '紧急' ? 'danger' : a.level === '重要' ? 'warning' : 'info',
-        levelText: a.level === '重要' ? '警告' : a.level
+        levelText: a.level === '重要' ? '警告' : a.level || '提示'
       }))
     }
   } catch {
-    // 使用默认演示数据
+    // 使用默认数据
   }
 
   try {
@@ -204,7 +240,19 @@ async function loadDashboardData() {
       }))
     }
   } catch {
-    // 使用默认演示数据
+    // 使用默认数据
+  }
+}
+
+let pieChart = null
+
+function updatePieChart() {
+  if (pieChart && pieData.value.length > 0) {
+    pieChart.setOption({
+      series: [{
+        data: pieData.value
+      }]
+    })
   }
 }
 
@@ -249,8 +297,11 @@ function initCharts() {
   })
 
   // 饼图
-  const pieChart = echarts.init(pieChartRef.value)
+  pieChart = echarts.init(pieChartRef.value)
   charts.push(pieChart)
+  const defaultPieData = pieData.value.length > 0 ? pieData.value : [
+    { value: 0, name: '暂无数据', itemStyle: { color: '#e5e7eb' } }
+  ]
   pieChart.setOption({
     tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
     legend: { orient: 'vertical', right: '5%', top: 'center', textStyle: { fontSize: 11 } },
@@ -259,14 +310,7 @@ function initCharts() {
       avoidLabelOverlap: false,
       label: { show: false },
       emphasis: { label: { show: true, fontSize: 14, fontWeight: 'bold' } },
-      data: [
-        { value: 486, name: '数控机床', itemStyle: { color: '#1890FF' } },
-        { value: 324, name: '工业机器人', itemStyle: { color: '#36cfc9' } },
-        { value: 215, name: 'AGV小车', itemStyle: { color: '#faad14' } },
-        { value: 892, name: 'PLC控制器', itemStyle: { color: '#722ed1' } },
-        { value: 186, name: '检测设备', itemStyle: { color: '#13c2c2' } },
-        { value: 744, name: '其他设备', itemStyle: { color: '#9ca3af' } }
-      ]
+      data: defaultPieData
     }]
   })
 }
@@ -279,10 +323,34 @@ onMounted(() => {
   loadDashboardData()
   initCharts()
   window.addEventListener('resize', handleResize)
+
+  // WebSocket 订阅 Dashboard 数据更新
+  wsClient.subscribe('/topic/dashboard', () => {
+    // 收到实时数据更新时刷新 KPI
+    loadDashboardData()
+  })
+
+  // WebSocket 订阅告警更新
+  wsClient.subscribe('/topic/alarm', (alarm) => {
+    if (alarm && alarm.status === '未处理') {
+      // 实时更新告警列表（插入到最前面）
+      const newAlarm = {
+        title: `${alarm.equipmentName || ''} ${alarm.message || ''}`.trim(),
+        area: alarm.area || '',
+        time: alarm.createTime || '刚刚',
+        type: alarm.level === '紧急' ? 'danger' : alarm.level === '重要' ? 'warning' : 'info',
+        levelText: alarm.level === '重要' ? '警告' : alarm.level || '提示'
+      }
+      alarmList.value.unshift(newAlarm)
+      if (alarmList.value.length > 4) alarmList.value.pop()
+    }
+  })
 })
 
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
+  wsClient.unsubscribe('/topic/dashboard')
+  wsClient.unsubscribe('/topic/alarm')
   charts.forEach(c => c.dispose())
 })
 </script>

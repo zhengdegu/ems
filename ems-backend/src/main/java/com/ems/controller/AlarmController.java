@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ems.dto.R;
 import com.ems.entity.Alarm;
 import com.ems.service.AlarmService;
+import com.ems.service.WebSocketService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
@@ -15,6 +16,8 @@ public class AlarmController {
 
     @Autowired
     private AlarmService alarmService;
+    @Autowired(required = false)
+    private WebSocketService webSocketService;
 
     @GetMapping
     public R list(@RequestParam(defaultValue = "1") int page,
@@ -49,6 +52,11 @@ public class AlarmController {
     public R handle(@PathVariable Long id, @RequestBody Map<String, String> body) {
         try {
             alarmService.handleAlarm(id, body.get("handleNote"));
+            // WebSocket 推送告警状态更新
+            Alarm updated = alarmService.detail(id);
+            if (updated != null && webSocketService != null) {
+                webSocketService.pushAlarm(updated);
+            }
             return R.ok();
         } catch (RuntimeException e) {
             return R.fail(e.getMessage());

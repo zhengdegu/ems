@@ -15,7 +15,7 @@
         active-text-color="#fff"
         router
       >
-        <template v-for="group in menuGroups" :key="group.label">
+        <template v-for="group in filteredMenuGroups" :key="group.label">
           <el-menu-item-group :title="sidebarCollapsed ? '' : group.label">
             <el-menu-item
               v-for="item in group.items"
@@ -56,7 +56,7 @@
             </template>
           </el-dropdown>
           
-          <el-badge :value="3" :max="99" class="notify-badge">
+          <el-badge :value="unreadCount" :max="99" :hidden="unreadCount === 0" class="notify-badge">
             <el-icon :size="18" class="header-icon" @click="$router.push({ name: 'notification' })"><Bell /></el-icon>
           </el-badge>
           <el-dropdown trigger="click">
@@ -103,12 +103,14 @@
 </template>
 
 <script setup>
-import { ref, watch, computed } from 'vue'
+import { ref, watch, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { ElNotification } from 'element-plus'
 import { useUserStore } from '../stores/user'
 import { useTabStore } from '../stores/tab'
 import { useLocaleStore } from '../stores/locale'
+import wsClient from '../utils/websocket'
 
 const route = useRoute()
 const router = useRouter()
@@ -117,6 +119,7 @@ const userStore = useUserStore()
 const tabStore = useTabStore()
 const localeStore = useLocaleStore()
 const sidebarCollapsed = ref(false)
+const unreadCount = ref(0)
 
 const locale = computed(() => localeStore.locale)
 
@@ -135,7 +138,8 @@ const menuGroups = [
     { label: '工单详情', name: 'work-order-detail', icon: 'DocumentChecked', i18nKey: 'workOrderDetail' }
   ]},
   { label: '监控预警', items: [
-    { label: '告警中心', name: 'alarm', icon: 'Bell', i18nKey: 'alarm' }
+    { label: '告警中心', name: 'alarm', icon: 'Bell', i18nKey: 'alarm' },
+    { label: '实时监控', name: 'device-monitor', icon: 'DataLine', i18nKey: 'deviceMonitor' }
   ]},
   { label: '备件管理', items: [
     { label: '备件库存', name: 'spare-part', icon: 'Box', i18nKey: 'sparePart' }
@@ -144,15 +148,28 @@ const menuGroups = [
     { label: '报表统计', name: 'report', icon: 'DataAnalysis', i18nKey: 'report' }
   ]},
   { label: '系统管理', items: [
-    { label: '用户管理', name: 'user-manage', icon: 'User', i18nKey: 'userManage' },
-    { label: '角色权限', name: 'role-permission', icon: 'Lock', i18nKey: 'rolePermission' },
-    { label: '系统设置', name: 'system-settings', icon: 'Setting', i18nKey: 'systemSettings' }
+    { label: '用户管理', name: 'user-manage', icon: 'User', i18nKey: 'userManage', permission: 'user:manage' },
+    { label: '角色权限', name: 'role-permission', icon: 'Lock', i18nKey: 'rolePermission', permission: 'role:manage' },
+    { label: '系统设置', name: 'system-settings', icon: 'Setting', i18nKey: 'systemSettings', permission: 'system:settings' }
   ]},
   { label: '个人', items: [
     { label: '个人中心', name: 'profile', icon: 'UserFilled', i18nKey: 'profile' },
     { label: '消息通知', name: 'notification', icon: 'Message', i18nKey: 'notification' }
   ]}
 ]
+
+// 根据权限过滤菜单
+const filteredMenuGroups = computed(() => {
+  return menuGroups
+    .map(group => ({
+      ...group,
+      items: group.items.filter(item => {
+        if (!item.permission) return true
+        return userStore.hasPermission(item.permission)
+      })
+    }))
+    .filter(group => group.items.length > 0)
+})
 
 // 监听路由变化，自动添加标签页
 watch(() => route.name, (name) => {
@@ -178,6 +195,42 @@ function handleLogout() {
 function handleLocaleChange(command) {
   localeStore.setLocale(command)
 }
+
+// WebSocket 连接与订阅
+onMounted(() => {
+  if (userStore.token) {
+    wsClient.connect(() => {
+      // 订阅告警通知
+      wsClient.subscribe('/topic/alarm', (alarm) => {
+        if (alarm.status === '未处理') {
+          unreadCount.value++
+          ElNotification({
+            title: '告警通知',
+            message: alarm.message || '收到新的告警',
+            type: alarm.level === '紧急' ? 'error' : alarm.level === '重要' ? 'warning' : 'info',
+            duration: 5000
+          })
+        }
+      })
+
+      // 订阅用户通知
+      const userId = userStore.userInfo?.id || 1
+      wsClient.subscribe(`/user/${userId}/queue/notification`, (notification) => {
+        unreadCount.value++
+        ElNotification({
+          title: notification.title || '新通知',
+          message: notification.content || '',
+          type: notification.type === 'alarm' ? 'warning' : 'info',
+          duration: 4000
+        })
+      })
+    })
+  }
+})
+
+onUnmounted(() => {
+  wsClient.disconnect()
+})
 </script>
 
 <style scoped>

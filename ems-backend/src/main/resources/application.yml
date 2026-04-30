@@ -13,6 +13,10 @@ spring:
       schema-locations: classpath:schema.sql
       data-locations: classpath:data.sql
       continue-on-error: true
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 50MB
 
 mybatis-plus:
   configuration:
@@ -27,3 +31,12 @@ ems:
   jwt:
     secret: ems-secret-key-2024-must-be-at-least-256-bits-long-for-hs256
     expiration: 86400000
+  upload:
+    path: ./uploads
+  mqtt:
+    enabled: false  # 默认关闭，有MQTT Broker时改为true
+    broker-url: tcp://localhost:1883
+    client-id: ems-server
+    username:
+    password:
+    topic: ems/device/#

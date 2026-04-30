@@ -1,6 +1,8 @@
 package com.ems.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.ems.annotation.OpLog;
+import com.ems.annotation.RequirePermission;
 import com.ems.dto.R;
 import com.ems.entity.Equipment;
 import com.ems.service.EquipmentService;
@@ -34,18 +36,22 @@ public class EquipmentController {
     }
 
     @PostMapping
+    @OpLog(module = "设备管理", action = "新增")
     public R create(@RequestBody Equipment equipment) {
         equipmentService.createEquipment(equipment);
         return R.ok();
     }
 
     @PutMapping("/{id}")
+    @OpLog(module = "设备管理", action = "编辑")
     public R update(@PathVariable Long id, @RequestBody Equipment equipment) {
         equipmentService.updateEquipment(id, equipment);
         return R.ok();
     }
 
     @DeleteMapping("/{id}")
+    @RequirePermission("equipment:delete")
+    @OpLog(module = "设备管理", action = "删除")
     public R delete(@PathVariable Long id) {
         equipmentService.deleteEquipment(id);
         return R.ok();

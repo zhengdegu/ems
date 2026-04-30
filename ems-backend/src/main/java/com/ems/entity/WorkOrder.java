@@ -18,6 +18,7 @@ public class WorkOrder {
     private String assignee;
     private String status;
     private String description;
+    private String creator;
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createTime;
     private LocalDateTime finishTime;

@@ -14,6 +14,12 @@ const routes = [
     meta: { title: '注册', noAuth: true }
   },
   {
+    path: '/403',
+    name: 'forbidden',
+    component: () => import('../views/403.vue'),
+    meta: { title: '无权限', noAuth: true }
+  },
+  {
     path: '/',
     component: () => import('../layout/MainLayout.vue'),
     redirect: '/dashboard',
@@ -26,11 +32,12 @@ const routes = [
       { path: 'work-order', name: 'work-order', component: () => import('../views/maintenance/WorkOrder.vue'), meta: { title: '工单管理', icon: 'Document' } },
       { path: 'work-order-detail/:id?', name: 'work-order-detail', component: () => import('../views/maintenance/WorkOrderDetail.vue'), meta: { title: '工单详情', icon: 'DocumentChecked' } },
       { path: 'alarm', name: 'alarm', component: () => import('../views/monitor/Alarm.vue'), meta: { title: '告警中心', icon: 'Bell' } },
+      { path: 'device-monitor', name: 'device-monitor', component: () => import('../views/monitor/DeviceMonitor.vue'), meta: { title: '实时监控', icon: 'DataLine' } },
       { path: 'spare-part', name: 'spare-part', component: () => import('../views/sparePart/SparePartList.vue'), meta: { title: '备件管理', icon: 'Box' } },
       { path: 'report', name: 'report', component: () => import('../views/analysis/Report.vue'), meta: { title: '报表统计', icon: 'DataAnalysis' } },
-      { path: 'user-manage', name: 'user-manage', component: () => import('../views/system/UserManage.vue'), meta: { title: '用户管理', icon: 'User' } },
-      { path: 'role-permission', name: 'role-permission', component: () => import('../views/system/RolePermission.vue'), meta: { title: '角色权限', icon: 'Lock' } },
-      { path: 'system-settings', name: 'system-settings', component: () => import('../views/system/SystemSettings.vue'), meta: { title: '系统设置', icon: 'Setting' } },
+      { path: 'user-manage', name: 'user-manage', component: () => import('../views/system/UserManage.vue'), meta: { title: '用户管理', icon: 'User', permission: 'user:manage' } },
+      { path: 'role-permission', name: 'role-permission', component: () => import('../views/system/RolePermission.vue'), meta: { title: '角色权限', icon: 'Lock', permission: 'role:manage' } },
+      { path: 'system-settings', name: 'system-settings', component: () => import('../views/system/SystemSettings.vue'), meta: { title: '系统设置', icon: 'Setting', permission: 'system:settings' } },
       { path: 'profile', name: 'profile', component: () => import('../views/personal/Profile.vue'), meta: { title: '个人中心', icon: 'UserFilled' } },
       { path: 'notification', name: 'notification', component: () => import('../views/personal/Notification.vue'), meta: { title: '消息通知', icon: 'Message' } },
     ]
@@ -47,9 +54,25 @@ router.beforeEach((to, from, next) => {
   const token = localStorage.getItem('ems_token')
   if (!to.meta.noAuth && !token) {
     next('/login')
-  } else {
-    next()
+    return
   }
+
+  // 权限检查
+  if (to.meta.permission) {
+    const userInfo = JSON.parse(localStorage.getItem('ems_user') || '{}')
+    // admin 直接放行
+    if (userInfo.role === 'admin') {
+      next()
+      return
+    }
+    const permissions = JSON.parse(localStorage.getItem('ems_permissions') || '[]')
+    if (!permissions.includes(to.meta.permission)) {
+      next('/403')
+      return
+    }
+  }
+
+  next()
 })
 
 export default router
