@@ -15,6 +15,7 @@ public class User {
     private String phone;
     private String email;
     private String department;
+    private String employeeNo;
     private String role;
     private String avatar;
     private Integer enabled;

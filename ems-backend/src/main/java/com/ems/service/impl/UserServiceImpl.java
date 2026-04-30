@@ -55,6 +55,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         user.setName(request.getName());
         user.setPhone(request.getPhone());
         user.setEmail(request.getEmail());
+        user.setDepartment(request.getDepartment());
+        user.setEmployeeNo(request.getEmployeeNo());
         user.setRole("user");
         user.setEnabled(1);
         save(user);

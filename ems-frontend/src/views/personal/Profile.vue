@@ -62,6 +62,31 @@
                 </el-table-column>
               </el-table>
             </el-tab-pane>
+
+            <el-tab-pane label="通知偏好" name="notifyPref">
+              <div style="max-width:600px">
+                <p style="color:#999;font-size:13px;margin-bottom:20px">设置不同类型消息的通知方式</p>
+                <el-table :data="notifyPrefs" size="small" :show-header="true" style="margin-bottom:20px">
+                  <el-table-column prop="label" label="通知类型" width="160" />
+                  <el-table-column label="站内信" width="100" align="center">
+                    <template #default="{ row }">
+                      <el-checkbox v-model="row.inApp" />
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="邮件" width="100" align="center">
+                    <template #default="{ row }">
+                      <el-checkbox v-model="row.email" />
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="短信" width="100" align="center">
+                    <template #default="{ row }">
+                      <el-checkbox v-model="row.sms" />
+                    </template>
+                  </el-table-column>
+                </el-table>
+                <el-button type="primary" :loading="savingPref" @click="saveNotifyPref">保存偏好</el-button>
+              </div>
+            </el-tab-pane>
           </el-tabs>
         </el-card>
       </el-col>
@@ -81,6 +106,7 @@ const activeTab = ref('info')
 const saving = ref(false)
 const changingPwd = ref(false)
 const logLoading = ref(false)
+const savingPref = ref(false)
 
 const infoForm = reactive({
   name: userStore.userInfo.name || '',
@@ -90,6 +116,12 @@ const infoForm = reactive({
 
 const pwdForm = reactive({ oldPassword: '', newPassword: '', confirmPassword: '' })
 const loginLogs = ref([])
+
+const notifyPrefs = reactive([
+  { key: 'urgent_alarm', label: '紧急告警通知', inApp: true, email: true, sms: true },
+  { key: 'order_status', label: '工单状态变更', inApp: true, email: true, sms: false },
+  { key: 'system_notice', label: '系统公告', inApp: true, email: false, sms: false }
+])
 
 async function saveInfo() {
   saving.value = true
@@ -154,5 +186,43 @@ async function loadLoginLogs() {
   }
 }
 
-onMounted(loadLoginLogs)
+async function saveNotifyPref() {
+  savingPref.value = true
+  try {
+    // 通知偏好保存到本地（后端暂无对应接口时）
+    const prefData = {}
+    notifyPrefs.forEach(p => {
+      prefData[`notify.${p.key}.inApp`] = String(p.inApp)
+      prefData[`notify.${p.key}.email`] = String(p.email)
+      prefData[`notify.${p.key}.sms`] = String(p.sms)
+    })
+    localStorage.setItem('ems_notify_pref', JSON.stringify(prefData))
+    ElMessage.success('通知偏好已保存')
+  } catch {
+    ElMessage.error('保存失败')
+  } finally {
+    savingPref.value = false
+  }
+}
+
+function loadNotifyPref() {
+  try {
+    const saved = localStorage.getItem('ems_notify_pref')
+    if (saved) {
+      const data = JSON.parse(saved)
+      notifyPrefs.forEach(p => {
+        if (data[`notify.${p.key}.inApp`] !== undefined) p.inApp = data[`notify.${p.key}.inApp`] === 'true'
+        if (data[`notify.${p.key}.email`] !== undefined) p.email = data[`notify.${p.key}.email`] === 'true'
+        if (data[`notify.${p.key}.sms`] !== undefined) p.sms = data[`notify.${p.key}.sms`] === 'true'
+      })
+    }
+  } catch {
+    // 使用默认值
+  }
+}
+
+onMounted(() => {
+  loadLoginLogs()
+  loadNotifyPref()
+})
 </script>

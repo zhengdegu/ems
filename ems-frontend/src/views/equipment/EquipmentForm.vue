@@ -83,13 +83,36 @@
           </el-col>
         </el-row>
 
-        <el-form-item label="备注">
-          <el-input v-model="form.remark" type="textarea" :rows="3" placeholder="请输入备注信息" />
+        <el-divider content-position="left">附件与备注</el-divider>
+        <el-form-item label="附件上传">
+          <el-upload
+            drag
+            action="#"
+            :auto-upload="false"
+            :file-list="fileList"
+            :on-change="handleFileChange"
+            :on-remove="handleFileRemove"
+            multiple
+            :limit="5"
+          >
+            <el-icon :size="40" style="color:#c0c4cc"><UploadFilled /></el-icon>
+            <div style="color:#666;margin-top:8px">将文件拖到此处，或<em style="color:#1890FF">点击上传</em></div>
+            <template #tip>
+              <div style="color:#999;font-size:12px;margin-top:8px">支持 PDF、Word、Excel、图片等格式，单个文件不超过 20MB</div>
+            </template>
+          </el-upload>
+        </el-form-item>
+
+        <el-form-item label="备注说明">
+          <el-input v-model="form.remark" type="textarea" :rows="4" placeholder="请输入备注信息..." />
         </el-form-item>
 
         <el-form-item>
-          <el-button type="primary" :loading="submitting" @click="handleSubmit">{{ isEdit ? '保存修改' : '提交' }}</el-button>
-          <el-button @click="$router.back()">取消</el-button>
+          <div style="display:flex;gap:12px">
+            <el-button @click="$router.back()">取消</el-button>
+            <el-button :loading="savingDraft" @click="handleSaveDraft">保存草稿</el-button>
+            <el-button type="primary" :loading="submitting" @click="handleSubmit">提交</el-button>
+          </div>
         </el-form-item>
       </el-form>
     </el-card>
@@ -107,7 +130,9 @@ const router = useRouter()
 const formRef = ref()
 const loading = ref(false)
 const submitting = ref(false)
+const savingDraft = ref(false)
 const isEdit = computed(() => !!route.params.id)
+const fileList = ref([])
 
 const form = reactive({
   code: '', name: '', type: '', model: '', manufacturer: '',
@@ -121,6 +146,20 @@ const rules = {
   type: [{ required: true, message: '请选择设备类型', trigger: 'change' }],
   model: [{ required: true, message: '请输入规格型号', trigger: 'blur' }],
   location: [{ required: true, message: '请选择所在位置', trigger: 'change' }]
+}
+
+function handleFileChange(file, uploadFileList) {
+  const maxSize = 20 * 1024 * 1024 // 20MB
+  if (file.size > maxSize) {
+    ElMessage.warning('文件大小不能超过 20MB')
+    uploadFileList.pop()
+    return
+  }
+  fileList.value = uploadFileList
+}
+
+function handleFileRemove(file, uploadFileList) {
+  fileList.value = uploadFileList
 }
 
 async function loadDetail() {
@@ -164,6 +203,33 @@ async function handleSubmit() {
     ElMessage.error('操作失败')
   } finally {
     submitting.value = false
+  }
+}
+
+async function handleSaveDraft() {
+  savingDraft.value = true
+  try {
+    const draftData = { ...form, status: 'draft' }
+    if (isEdit.value) {
+      const res = await updateEquipment(route.params.id, draftData)
+      if (res.code === 200) {
+        ElMessage.success('草稿已保存')
+      } else {
+        ElMessage.error(res.message || '保存失败')
+      }
+    } else {
+      const res = await createEquipment(draftData)
+      if (res.code === 200) {
+        ElMessage.success('草稿已保存')
+        router.back()
+      } else {
+        ElMessage.error(res.message || '保存失败')
+      }
+    }
+  } catch {
+    ElMessage.error('保存失败')
+  } finally {
+    savingDraft.value = false
   }
 }
 

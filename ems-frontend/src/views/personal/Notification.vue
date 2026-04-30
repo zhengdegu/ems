@@ -1,32 +1,43 @@
 <template>
   <div>
     <el-card shadow="never">
-      <div style="display:flex;justify-content:space-between;margin-bottom:16px">
-        <el-radio-group v-model="filterType" size="small" @change="loadData">
-          <el-radio-button label="all">全部</el-radio-button>
-          <el-radio-button label="unread">未读</el-radio-button>
-          <el-radio-button label="alarm">告警</el-radio-button>
-          <el-radio-button label="order">工单</el-radio-button>
-          <el-radio-button label="system">系统</el-radio-button>
-        </el-radio-group>
-        <el-button size="small" @click="handleMarkAllRead">全部已读</el-button>
+      <!-- 顶部筛选栏 -->
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+        <div style="display:flex;gap:12px">
+          <el-button :type="filterType === 'all' ? 'primary' : 'default'" @click="switchFilter('all')">
+            全部 <el-badge :value="total" :max="99" style="margin-left:6px" />
+          </el-button>
+          <el-button :type="filterType === 'unread' ? 'primary' : 'default'" @click="switchFilter('unread')">
+            未读 <el-badge :value="unreadCount" :max="99" style="margin-left:6px" type="danger" />
+          </el-button>
+        </div>
+        <el-button @click="handleMarkAllRead">全部已读</el-button>
       </div>
 
       <div v-loading="loading">
-        <div v-for="msg in messages" :key="msg.id"
-          :style="{ background: msg.isRead ? '#fff' : '#f6ffed', padding: '16px', borderBottom: '1px solid #f0f0f0', cursor: 'pointer' }"
-          @click="handleRead(msg)">
-          <div style="display:flex;align-items:center;gap:10px">
-            <el-badge :is-dot="!msg.isRead">
-              <el-icon :size="20" :color="typeColor[msg.type] || '#1890FF'"><component :is="typeIcon[msg.type] || 'Bell'" /></el-icon>
-            </el-badge>
-            <div style="flex:1">
-              <div style="display:flex;justify-content:space-between">
-                <span style="font-weight:600;font-size:14px;color:#333">{{ msg.title }}</span>
-                <span style="font-size:12px;color:#999">{{ msg.createTime }}</span>
-              </div>
-              <p style="color:#666;font-size:13px;margin-top:6px">{{ msg.content }}</p>
+        <!-- 消息卡片列表 -->
+        <div
+          v-for="msg in messages"
+          :key="msg.id"
+          class="notification-card"
+          :class="{ 'is-read': msg.isRead }"
+          :style="{ borderLeftColor: getBorderColor(msg.type) }"
+        >
+          <div class="notification-icon" :style="{ background: getBgColor(msg.type) }">
+            <el-icon :size="20" :color="getBorderColor(msg.type)">
+              <component :is="getIcon(msg.type)" />
+            </el-icon>
+          </div>
+          <div class="notification-body">
+            <div class="notification-header">
+              <span class="notification-title">{{ msg.title }}</span>
+              <span class="notification-time">{{ msg.createTime }}</span>
             </div>
+            <p class="notification-content">{{ msg.content }}</p>
+          </div>
+          <div class="notification-actions">
+            <el-button link type="primary" size="small" @click="handleView(msg)">查看详情</el-button>
+            <el-button v-if="!msg.isRead" link type="info" size="small" @click="handleRead(msg)">标为已读</el-button>
           </div>
         </div>
 
@@ -46,7 +57,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useUserStore } from '../../stores/user'
 import { getNotificationList, markAsRead, markAllAsRead } from '../../api/notification'
@@ -59,8 +70,31 @@ const pageSize = ref(20)
 const total = ref(0)
 const messages = ref([])
 
-const typeIcon = { alarm: 'Bell', order: 'Document', system: 'Setting' }
-const typeColor = { alarm: '#ff4d4f', order: '#1890FF', system: '#722ed1' }
+const unreadCount = computed(() => {
+  // 从总数据中估算，或使用后端返回的未读数
+  return messages.value.filter(m => !m.isRead).length
+})
+
+function getBorderColor(type) {
+  const map = { alarm: '#ff4d4f', order: '#1890FF', system: '#999' }
+  return map[type] || '#1890FF'
+}
+
+function getBgColor(type) {
+  const map = { alarm: 'rgba(255,77,79,0.1)', order: 'rgba(24,144,255,0.1)', system: 'rgba(153,153,153,0.1)' }
+  return map[type] || 'rgba(24,144,255,0.1)'
+}
+
+function getIcon(type) {
+  const map = { alarm: 'Bell', order: 'Document', system: 'Setting' }
+  return map[type] || 'Bell'
+}
+
+function switchFilter(type) {
+  filterType.value = type
+  page.value = 1
+  loadData()
+}
 
 async function loadData() {
   loading.value = true
@@ -91,6 +125,13 @@ async function handleRead(msg) {
   }
 }
 
+function handleView(msg) {
+  if (!msg.isRead) {
+    handleRead(msg)
+  }
+  // 可根据消息类型跳转到对应详情页
+}
+
 async function handleMarkAllRead() {
   try {
     await markAllAsRead({ userId: userStore.userInfo.id })
@@ -103,3 +144,70 @@ async function handleMarkAllRead() {
 
 onMounted(loadData)
 </script>
+
+<style scoped>
+.notification-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 16px 20px;
+  margin-bottom: 12px;
+  background: #fff;
+  border-radius: 8px;
+  border-left: 4px solid #1890FF;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  transition: all 0.2s;
+}
+.notification-card:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+.notification-card.is-read {
+  opacity: 0.6;
+}
+.notification-icon {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.notification-body {
+  flex: 1;
+  min-width: 0;
+}
+.notification-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.notification-title {
+  font-weight: 600;
+  font-size: 14px;
+  color: #333;
+}
+.notification-time {
+  font-size: 12px;
+  color: #999;
+  flex-shrink: 0;
+  margin-left: 12px;
+}
+.notification-content {
+  color: #666;
+  font-size: 13px;
+  margin: 0;
+  line-height: 1.6;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.notification-actions {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-end;
+}
+</style>
