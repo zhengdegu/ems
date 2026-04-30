@@ -22,21 +22,27 @@ public class AlarmRuleController {
         return R.ok(result);
     }
 
+    @Autowired
+    private com.ems.service.CacheService cacheService;
+
     @PostMapping
     public R create(@RequestBody AlarmRule rule) {
         alarmRuleService.createRule(rule);
+        cacheService.evictAlarmRules();
         return R.ok();
     }
 
     @PutMapping("/{id}")
     public R update(@PathVariable Long id, @RequestBody AlarmRule rule) {
         alarmRuleService.updateRule(id, rule);
+        cacheService.evictAlarmRules();
         return R.ok();
     }
 
     @DeleteMapping("/{id}")
     public R delete(@PathVariable Long id) {
         alarmRuleService.deleteRule(id);
+        cacheService.evictAlarmRules();
         return R.ok();
     }
 
@@ -44,6 +50,7 @@ public class AlarmRuleController {
     public R toggleEnabled(@PathVariable Long id) {
         try {
             alarmRuleService.toggleEnabled(id);
+            cacheService.evictAlarmRules();
             return R.ok();
         } catch (RuntimeException e) {
             return R.fail(e.getMessage());

@@ -2,14 +2,13 @@ package com.ems.scheduler;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.ems.entity.MaintenancePlan;
-import com.ems.entity.Notification;
 import com.ems.entity.WorkOrder;
-import com.ems.enums.WorkOrderStatus;
+import com.ems.event.MaintenancePlanDueEvent;
 import com.ems.mapper.MaintenancePlanMapper;
-import com.ems.mapper.NotificationMapper;
 import com.ems.mapper.WorkOrderMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -25,7 +24,7 @@ public class MaintenanceScheduler {
     @Autowired
     private WorkOrderMapper workOrderMapper;
     @Autowired
-    private NotificationMapper notificationMapper;
+    private ApplicationEventPublisher eventPublisher;
 
     /**
      * 每天凌晨1点检查维护计划
@@ -52,31 +51,10 @@ public class MaintenanceScheduler {
                 );
                 if (existCount > 0) continue;
 
-                // 创建工单
-                WorkOrder wo = new WorkOrder();
-                wo.setCode("WO-MP-" + System.currentTimeMillis());
-                wo.setTitle("[维护计划] " + plan.getName());
-                wo.setType(plan.getType());
-                wo.setEquipmentId(plan.getEquipmentId());
-                wo.setEquipmentName(plan.getEquipmentName());
-                wo.setPriority("中");
-                wo.setStatus(WorkOrderStatus.WAITING.getCode());
-                wo.setAssignee(plan.getResponsible());
-                wo.setCreator("系统自动");
-                wo.setDescription("维护计划自动生成工单，计划: " + plan.getName() + "，周期: " + plan.getCycle());
-                wo.setSourcePlanId(plan.getId());
-                workOrderMapper.insert(wo);
+                // 发布维护计划到期事件（工单创建、通知等由监听器处理）
+                eventPublisher.publishEvent(new MaintenancePlanDueEvent(this, plan));
 
-                // 创建通知
-                Notification notification = new Notification();
-                notification.setTitle("维护计划提醒: " + plan.getName());
-                notification.setContent("维护计划即将到期，已自动生成工单 " + wo.getCode());
-                notification.setType("system");
-                notification.setUserId(1L);
-                notification.setIsRead(0);
-                notificationMapper.insert(notification);
-
-                log.info("维护计划自动生成工单: {} -> {}", plan.getName(), wo.getCode());
+                log.info("维护计划到期，已发布事件: {}", plan.getName());
             } catch (Exception e) {
                 log.error("处理维护计划异常, planId={}, planName={}: {}", plan.getId(), plan.getName(), e.getMessage(), e);
             }

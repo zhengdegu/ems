@@ -3,8 +3,12 @@
     <el-page-header @back="$router.back()" style="margin-bottom:16px">
       <template #content><span style="font-size:16px;font-weight:600">工单详情 - {{ order.code }}</span></template>
       <template #extra>
-        <el-button type="primary" v-if="order.status === '待接单'" @click="handleAccept">接单处理</el-button>
-        <el-button>转派</el-button>
+        <el-button
+          v-for="action in availableActions"
+          :key="action.status"
+          :type="action.type"
+          @click="handleStatusChange(action.status)"
+        >{{ action.label }}</el-button>
       </template>
     </el-page-header>
 
@@ -26,7 +30,7 @@
             <el-descriptions-item label="负责人">{{ order.assignee }}</el-descriptions-item>
             <el-descriptions-item label="创建时间">{{ order.createTime }}</el-descriptions-item>
             <el-descriptions-item label="状态">
-              <el-tag :type="order.status === '处理中' ? 'warning' : order.status === '已完成' ? 'success' : 'info'" size="small">{{ order.status }}</el-tag>
+              <el-tag :type="statusTagType(order.status)" size="small">{{ order.status }}</el-tag>
             </el-descriptions-item>
           </el-descriptions>
           <div style="margin-top:16px">
@@ -132,13 +136,43 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import { getWorkOrderDetail, updateWorkOrderStatus } from '../../api/workOrder'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { getWorkOrderDetail, updateWorkOrderStatus, getAvailableTransitions } from '../../api/workOrder'
 
 const route = useRoute()
 const loading = ref(false)
 
 const order = ref({})
+const transitions = ref([])
+
+// 状态 -> 按钮配置映射
+const statusActionMap = {
+  '待接单': { label: '接单', type: 'primary' },
+  '处理中': { label: '开始处理', type: 'warning' },
+  '待验收': { label: '提交验收', type: '' },
+  '已完成': { label: '完成', type: 'success' },
+  '已取消': { label: '取消', type: 'danger' },
+}
+
+// 根据后端返回的可用转换，动态生成操作按钮
+const availableActions = computed(() => {
+  return transitions.value.map(status => {
+    const config = statusActionMap[status] || { label: status, type: 'info' }
+    return { status, label: config.label, type: config.type }
+  })
+})
+
+function statusTagType(status) {
+  const map = {
+    '处理中': 'warning',
+    '已完成': 'success',
+    '已取消': 'danger',
+    '待接单': 'info',
+    '待验收': '',
+    'pending': 'info',
+  }
+  return map[status] || 'info'
+}
 
 const timeline = [
   { time: '2024-03-08 09:30', title: '创建工单', desc: '系统自动创建紧急维修工单', operator: '系统', type: 'primary', active: true },
@@ -177,6 +211,8 @@ async function loadDetail() {
     const res = await getWorkOrderDetail(id)
     if (res.code === 200 && res.data) {
       order.value = res.data
+      // 加载可用状态转换
+      await loadTransitions(id)
     }
   } catch {
     ElMessage.error('加载工单详情失败')
@@ -185,15 +221,37 @@ async function loadDetail() {
   }
 }
 
-async function handleAccept() {
+async function loadTransitions(id) {
   try {
-    const res = await updateWorkOrderStatus(order.value.id, '处理中')
-    if (res.code === 200) {
-      ElMessage.success('已接单')
-      loadDetail()
+    const res = await getAvailableTransitions(id)
+    if (res.code === 200 && res.data) {
+      transitions.value = Array.isArray(res.data) ? res.data : []
     }
   } catch {
-    ElMessage.error('操作失败')
+    transitions.value = []
+  }
+}
+
+async function handleStatusChange(newStatus) {
+  const actionLabel = (statusActionMap[newStatus] || {}).label || newStatus
+  try {
+    await ElMessageBox.confirm(
+      `确认将工单状态变更为「${newStatus}」？`,
+      actionLabel,
+      { confirmButtonText: '确认', cancelButtonText: '取消', type: 'warning' }
+    )
+    const res = await updateWorkOrderStatus(order.value.id, newStatus)
+    if (res.code === 200) {
+      ElMessage.success('状态变更成功')
+      loadDetail()
+    } else {
+      ElMessage.error(res.msg || '操作失败')
+    }
+  } catch (err) {
+    // 用户取消确认框，不做处理
+    if (err !== 'cancel') {
+      ElMessage.error('操作失败')
+    }
   }
 }
 

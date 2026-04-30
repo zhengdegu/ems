@@ -17,3 +17,6 @@ export const deleteWorkOrder = (id) => request.delete(`/work-order/${id}`)
 
 // 更新工单状态
 export const updateWorkOrderStatus = (id, status) => request.put(`/work-order/${id}/status`, { status })
+
+// 获取工单可用状态转换
+export const getAvailableTransitions = (id) => request.get(`/work-order/${id}/available-transitions`)

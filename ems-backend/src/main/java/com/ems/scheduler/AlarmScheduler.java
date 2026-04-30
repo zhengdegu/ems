@@ -1,15 +1,19 @@
 package com.ems.scheduler;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.ems.entity.*;
+import com.ems.entity.Alarm;
+import com.ems.entity.AlarmRule;
+import com.ems.entity.Equipment;
 import com.ems.enums.AlarmStatus;
 import com.ems.enums.EquipmentStatus;
-import com.ems.enums.WorkOrderStatus;
-import com.ems.mapper.*;
+import com.ems.event.AlarmCreatedEvent;
+import com.ems.mapper.AlarmMapper;
+import com.ems.mapper.EquipmentMapper;
 import com.ems.service.AlarmRuleService;
-import com.ems.service.WebSocketService;
+import com.ems.service.CacheService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -26,11 +30,9 @@ public class AlarmScheduler {
     @Autowired
     private AlarmMapper alarmMapper;
     @Autowired
-    private NotificationMapper notificationMapper;
+    private ApplicationEventPublisher eventPublisher;
     @Autowired
-    private WorkOrderMapper workOrderMapper;
-    @Autowired(required = false)
-    private WebSocketService webSocketService;
+    private CacheService cacheService;
 
     /**
      * 每分钟扫描告警规则，模拟设备数据检查
@@ -41,9 +43,15 @@ public class AlarmScheduler {
     public void checkAlarmRules() {
         log.info("=== 告警规则扫描开始 ===");
 
-        List<AlarmRule> rules = alarmRuleService.list(
-                new LambdaQueryWrapper<AlarmRule>().eq(AlarmRule::getEnabled, 1)
-        );
+        // 优先从缓存获取告警规则
+        @SuppressWarnings("unchecked")
+        List<AlarmRule> rules = (List<AlarmRule>) cacheService.getCachedAlarmRules();
+        if (rules == null) {
+            rules = alarmRuleService.list(
+                    new LambdaQueryWrapper<AlarmRule>().eq(AlarmRule::getEnabled, 1)
+            );
+            cacheService.cacheAlarmRules(rules);
+        }
 
         for (AlarmRule rule : rules) {
             try {
@@ -69,39 +77,8 @@ public class AlarmScheduler {
                     alarm.setStatus(AlarmStatus.UNHANDLED.getCode());
                     alarmMapper.insert(alarm);
 
-                    // 创建通知
-                    Notification notification = new Notification();
-                    notification.setTitle("告警通知: " + eq.getName());
-                    notification.setContent(alarm.getMessage());
-                    notification.setType("alarm");
-                    notification.setUserId(1L);
-                    notification.setIsRead(0);
-                    notificationMapper.insert(notification);
-
-                    // WebSocket 推送告警
-                    if (webSocketService != null) {
-                        webSocketService.pushAlarm(alarm);
-                        webSocketService.pushNotification(1L, notification);
-                    }
-
-                    // 紧急告警自动创建工单
-                    if ("紧急".equals(rule.getLevel())) {
-                        WorkOrder wo = new WorkOrder();
-                        wo.setCode("WO-AUTO-" + System.currentTimeMillis());
-                        wo.setTitle("[自动] " + alarm.getMessage());
-                        wo.setType("故障维修");
-                        wo.setEquipmentId(eq.getId());
-                        wo.setEquipmentName(eq.getCode() + " " + eq.getName());
-                        wo.setPriority("紧急");
-                        wo.setStatus(WorkOrderStatus.WAITING.getCode());
-                        wo.setAssignee(eq.getResponsible());
-                        workOrderMapper.insert(wo);
-                        log.info("自动创建紧急工单: {}", wo.getTitle());
-
-                        if (webSocketService != null) {
-                            webSocketService.pushWorkOrderUpdate(wo);
-                        }
-                    }
+                    // 发布告警事件（通知、WebSocket推送、自动创建工单等由监听器处理）
+                    eventPublisher.publishEvent(new AlarmCreatedEvent(this, alarm));
 
                     log.info("触发告警: {} - {}", rule.getLevel(), alarm.getMessage());
                 }

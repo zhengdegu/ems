@@ -12,6 +12,7 @@ import com.ems.mapper.AlarmMapper;
 import com.ems.mapper.EquipmentMapper;
 import com.ems.mapper.MaintenancePlanMapper;
 import com.ems.mapper.WorkOrderMapper;
+import com.ems.service.CacheService;
 import com.ems.service.DashboardService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -40,8 +41,17 @@ public class DashboardServiceImpl implements DashboardService {
     @Autowired
     private MaintenancePlanMapper maintenancePlanMapper;
 
+    @Autowired
+    private CacheService cacheService;
+
     @Override
     public Map<String, Object> getOverview() {
+        // 先查缓存
+        Map<String, Object> cached = cacheService.getCachedDashboard();
+        if (cached != null) {
+            return cached;
+        }
+
         Map<String, Object> result = new HashMap<>();
 
         // 设备总数
@@ -127,6 +137,9 @@ public class DashboardServiceImpl implements DashboardService {
                         m -> m.get("count"),
                         (a, b) -> a));
         result.put("alarmByLevel", alarmByLevel);
+
+        // 写入缓存
+        cacheService.cacheDashboard(result);
 
         return result;
     }
