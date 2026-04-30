@@ -22,4 +22,5 @@ public class WorkOrder {
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createTime;
     private LocalDateTime finishTime;
+    private Long sourcePlanId;
 }

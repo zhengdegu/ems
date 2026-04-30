@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.ems.entity.MaintenancePlan;
 import com.ems.entity.Notification;
 import com.ems.entity.WorkOrder;
+import com.ems.enums.WorkOrderStatus;
 import com.ems.mapper.MaintenancePlanMapper;
 import com.ems.mapper.NotificationMapper;
 import com.ems.mapper.WorkOrderMapper;
@@ -42,38 +43,43 @@ public class MaintenanceScheduler {
         );
 
         for (MaintenancePlan plan : plans) {
-            // 检查是否已经为该计划生成过工单（避免重复）
-            Long existCount = workOrderMapper.selectCount(
-                    new LambdaQueryWrapper<WorkOrder>()
-                            .like(WorkOrder::getTitle, plan.getName())
-                            .ge(WorkOrder::getCreateTime, LocalDate.now().atStartOfDay())
-            );
-            if (existCount > 0) continue;
+            try {
+                // 通过 sourcePlanId 精确检查是否已生成过工单（避免重复）
+                Long existCount = workOrderMapper.selectCount(
+                        new LambdaQueryWrapper<WorkOrder>()
+                                .eq(WorkOrder::getSourcePlanId, plan.getId())
+                                .ge(WorkOrder::getCreateTime, LocalDate.now().atStartOfDay())
+                );
+                if (existCount > 0) continue;
 
-            // 创建工单
-            WorkOrder wo = new WorkOrder();
-            wo.setCode("WO-MP-" + System.currentTimeMillis());
-            wo.setTitle("[维护计划] " + plan.getName());
-            wo.setType(plan.getType());
-            wo.setEquipmentId(plan.getEquipmentId());
-            wo.setEquipmentName(plan.getEquipmentName());
-            wo.setPriority("中");
-            wo.setStatus("待接单");
-            wo.setAssignee(plan.getResponsible());
-            wo.setCreator("系统自动");
-            wo.setDescription("维护计划自动生成工单，计划: " + plan.getName() + "，周期: " + plan.getCycle());
-            workOrderMapper.insert(wo);
+                // 创建工单
+                WorkOrder wo = new WorkOrder();
+                wo.setCode("WO-MP-" + System.currentTimeMillis());
+                wo.setTitle("[维护计划] " + plan.getName());
+                wo.setType(plan.getType());
+                wo.setEquipmentId(plan.getEquipmentId());
+                wo.setEquipmentName(plan.getEquipmentName());
+                wo.setPriority("中");
+                wo.setStatus(WorkOrderStatus.WAITING.getCode());
+                wo.setAssignee(plan.getResponsible());
+                wo.setCreator("系统自动");
+                wo.setDescription("维护计划自动生成工单，计划: " + plan.getName() + "，周期: " + plan.getCycle());
+                wo.setSourcePlanId(plan.getId());
+                workOrderMapper.insert(wo);
 
-            // 创建通知
-            Notification notification = new Notification();
-            notification.setTitle("维护计划提醒: " + plan.getName());
-            notification.setContent("维护计划即将到期，已自动生成工单 " + wo.getCode());
-            notification.setType("system");
-            notification.setUserId(1L);
-            notification.setIsRead(0);
-            notificationMapper.insert(notification);
+                // 创建通知
+                Notification notification = new Notification();
+                notification.setTitle("维护计划提醒: " + plan.getName());
+                notification.setContent("维护计划即将到期，已自动生成工单 " + wo.getCode());
+                notification.setType("system");
+                notification.setUserId(1L);
+                notification.setIsRead(0);
+                notificationMapper.insert(notification);
 
-            log.info("维护计划自动生成工单: {} -> {}", plan.getName(), wo.getCode());
+                log.info("维护计划自动生成工单: {} -> {}", plan.getName(), wo.getCode());
+            } catch (Exception e) {
+                log.error("处理维护计划异常, planId={}, planName={}: {}", plan.getId(), plan.getName(), e.getMessage(), e);
+            }
         }
         log.info("=== 维护计划检查完成 ===");
     }

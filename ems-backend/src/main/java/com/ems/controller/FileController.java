@@ -22,6 +22,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @RestController
@@ -34,6 +35,13 @@ public class FileController {
     @Autowired
     private AttachmentMapper attachmentMapper;
 
+    /** 允许上传的文件扩展名白名单 */
+    private static final Set<String> ALLOWED_EXTENSIONS = Set.of(
+            "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx",
+            "jpg", "jpeg", "png", "gif", "bmp",
+            "txt", "csv", "zip", "rar"
+    );
+
     @PostMapping("/upload")
     public R<?> upload(@RequestParam("file") MultipartFile file,
                        @RequestParam(required = false) String bizType,
@@ -43,6 +51,21 @@ public class FileController {
         }
 
         try {
+            // 获取并校验原始文件名
+            String originalName = file.getOriginalFilename();
+            if (originalName == null || originalName.isBlank()) {
+                return R.fail("文件名不能为空");
+            }
+
+            // 提取扩展名并校验白名单
+            String ext = "";
+            if (originalName.contains(".")) {
+                ext = originalName.substring(originalName.lastIndexOf(".") + 1).toLowerCase();
+            }
+            if (ext.isEmpty() || !ALLOWED_EXTENSIONS.contains(ext)) {
+                return R.fail("不支持的文件类型: ." + ext + "，允许的类型: " + ALLOWED_EXTENSIONS);
+            }
+
             // 按年月组织目录
             String datePath = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy/MM"));
             File dir = new File(uploadPath + "/" + datePath);
@@ -50,13 +73,8 @@ public class FileController {
                 dir.mkdirs();
             }
 
-            // 生成存储文件名
-            String originalName = file.getOriginalFilename();
-            String ext = "";
-            if (originalName != null && originalName.contains(".")) {
-                ext = originalName.substring(originalName.lastIndexOf("."));
-            }
-            String storedName = UUID.randomUUID().toString().replace("-", "") + ext;
+            // 使用 UUID 重命名，防止路径穿越
+            String storedName = UUID.randomUUID().toString().replace("-", "") + "." + ext;
             String filePath = datePath + "/" + storedName;
 
             // 保存文件
@@ -69,7 +87,7 @@ public class FileController {
                 uploader = auth.getPrincipal().toString();
             }
 
-            // 保存记录
+            // 保存记录（原始文件名只存数据库）
             Attachment attachment = new Attachment();
             attachment.setFileName(originalName);
             attachment.setFilePath(filePath);

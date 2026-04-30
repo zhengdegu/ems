@@ -5,6 +5,9 @@ import com.ems.entity.Alarm;
 import com.ems.entity.Equipment;
 import com.ems.entity.MaintenancePlan;
 import com.ems.entity.WorkOrder;
+import com.ems.enums.AlarmStatus;
+import com.ems.enums.EquipmentStatus;
+import com.ems.enums.WorkOrderStatus;
 import com.ems.mapper.AlarmMapper;
 import com.ems.mapper.EquipmentMapper;
 import com.ems.mapper.MaintenancePlanMapper;
@@ -17,7 +20,6 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -48,19 +50,19 @@ public class DashboardServiceImpl implements DashboardService {
 
         // 运行中设备
         long runningCount = equipmentMapper.selectCount(
-                new LambdaQueryWrapper<Equipment>().eq(Equipment::getStatus, "running"));
+                new LambdaQueryWrapper<Equipment>().eq(Equipment::getStatus, EquipmentStatus.RUNNING.getCode()));
         result.put("runningCount", runningCount);
 
         // 故障设备
         long faultCount = equipmentMapper.selectCount(
                 new LambdaQueryWrapper<Equipment>()
-                        .eq(Equipment::getStatus, "stopped")
-                        .or().eq(Equipment::getStatus, "fault"));
+                        .eq(Equipment::getStatus, EquipmentStatus.STOPPED.getCode())
+                        .or().eq(Equipment::getStatus, EquipmentStatus.FAULT.getCode()));
         result.put("faultCount", faultCount);
 
         // 维护中设备
         long maintenanceCount = equipmentMapper.selectCount(
-                new LambdaQueryWrapper<Equipment>().eq(Equipment::getStatus, "maintenance"));
+                new LambdaQueryWrapper<Equipment>().eq(Equipment::getStatus, EquipmentStatus.MAINTENANCE.getCode()));
         result.put("maintenanceCount", maintenanceCount);
 
         // 在线率
@@ -81,13 +83,13 @@ public class DashboardServiceImpl implements DashboardService {
         long pendingMaintenance = maintenancePlanMapper.selectCount(
                 new LambdaQueryWrapper<MaintenancePlan>()
                         .le(MaintenancePlan::getNextDate, LocalDate.now())
-              .eq(MaintenancePlan::getStatus, "启用"));
+                        .eq(MaintenancePlan::getStatus, "启用"));
         result.put("pendingMaintenance", pendingMaintenance);
 
         // 待处理工单
         long pendingWorkOrders = workOrderMapper.selectCount(
                 new LambdaQueryWrapper<WorkOrder>()
-                        .in(WorkOrder::getStatus, "pending", "待接单"));
+                        .in(WorkOrder::getStatus, WorkOrderStatus.PENDING.getCode(), WorkOrderStatus.WAITING.getCode()));
         result.put("pendingWorkOrders", pendingWorkOrders);
 
         // 今日告警
@@ -108,21 +110,22 @@ public class DashboardServiceImpl implements DashboardService {
                         .lt(WorkOrder::getCreateTime, monthEnd));
         result.put("monthWorkOrders", monthWorkOrders);
 
-        // 设备分类统计
-        List<Equipment> allEquipment = equipmentMapper.selectList(null);
-        Map<String, Long> equipmentByType = allEquipment.stream()
-                .collect(Collectors.groupingBy(
-                        e -> e.getType() != null ? e.getType() : "未分类",
-                        Collectors.counting()));
+        // 设备分类统计（使用 SQL GROUP BY 替代全表加载）
+        List<Map<String, Object>> typeCountList = equipmentMapper.countByType();
+        Map<String, Object> equipmentByType = typeCountList.stream()
+                .collect(Collectors.toMap(
+                        m -> m.get("type") != null ? m.get("type").toString() : "未分类",
+                        m -> m.get("count"),
+                        (a, b) -> a));
         result.put("equipmentByType", equipmentByType);
 
-        // 告警按级别统计（未处理的）
-        List<Alarm> unhandledAlarms = alarmMapper.selectList(
-                new LambdaQueryWrapper<Alarm>().ne(Alarm::getStatus, "已处理"));
-        Map<String, Long> alarmByLevel = unhandledAlarms.stream()
-                .collect(Collectors.groupingBy(
-                        a -> a.getLevel() != null ? a.getLevel() : "未知",
-                        Collectors.counting()));
+        // 告警按级别统计（使用 SQL GROUP BY 替代全表加载）
+        List<Map<String, Object>> levelCountList = alarmMapper.countByLevel();
+        Map<String, Object> alarmByLevel = levelCountList.stream()
+                .collect(Collectors.toMap(
+                        m -> m.get("level") != null ? m.get("level").toString() : "未知",
+                        m -> m.get("count"),
+                        (a, b) -> a));
         result.put("alarmByLevel", alarmByLevel);
 
         return result;
@@ -135,7 +138,7 @@ public class DashboardServiceImpl implements DashboardService {
         Map<String, Long> monthlyOrders = allOrders.stream()
                 .filter(w -> w.getCreateTime() != null)
                 .collect(Collectors.groupingBy(
-                        w -> w.getCreateTime().format(DateTimeFormatter.ofPattern("yyyy-MM")),
+                        w -> w.getCreateTime().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM")),
                         Collectors.counting()));
         result.put("workOrderTrend", monthlyOrders);
 
@@ -143,7 +146,7 @@ public class DashboardServiceImpl implements DashboardService {
         Map<String, Long> monthlyAlarms = allAlarms.stream()
                 .filter(a -> a.getCreateTime() != null)
                 .collect(Collectors.groupingBy(
-                        a -> a.getCreateTime().format(DateTimeFormatter.ofPattern("yyyy-MM")),
+                        a -> a.getCreateTime().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM")),
                         Collectors.counting()));
         result.put("alarmTrend", monthlyAlarms);
         return result;
@@ -152,25 +155,32 @@ public class DashboardServiceImpl implements DashboardService {
     @Override
     public Map<String, Object> getDistribution() {
         Map<String, Object> result = new HashMap<>();
-        List<Equipment> allEquipment = equipmentMapper.selectList(null);
 
-        Map<String, Long> byType = allEquipment.stream()
-                .collect(Collectors.groupingBy(
-                        e -> e.getType() != null ? e.getType() : "未分类",
-                        Collectors.counting()));
+        // 使用 SQL GROUP BY 替代全表加载到内存
+        List<Map<String, Object>> typeList = equipmentMapper.countByType();
+        Map<String, Object> byType = typeList.stream()
+                .collect(Collectors.toMap(
+                        m -> m.get("type") != null ? m.get("type").toString() : "未分类",
+                        m -> m.get("count"),
+                        (a, b) -> a));
         result.put("byType", byType);
 
-        Map<String, Long> byStatus = allEquipment.stream()
-                .collect(Collectors.groupingBy(
-                        e -> e.getStatus() != null ? e.getStatus() : "unknown",
-                        Collectors.counting()));
+        List<Map<String, Object>> statusList = equipmentMapper.countByStatus();
+        Map<String, Object> byStatus = statusList.stream()
+                .collect(Collectors.toMap(
+                        m -> m.get("status") != null ? m.get("status").toString() : "unknown",
+                        m -> m.get("count"),
+                        (a, b) -> a));
         result.put("byStatus", byStatus);
 
-        Map<String, Long> byLocation = allEquipment.stream()
-                .collect(Collectors.groupingBy(
-                        e -> e.getLocation() != null ? e.getLocation() : "未知区域",
-                        Collectors.counting()));
+        List<Map<String, Object>> locationList = equipmentMapper.countByLocation();
+        Map<String, Object> byLocation = locationList.stream()
+                .collect(Collectors.toMap(
+                        m -> m.get("location") != null ? m.get("location").toString() : "未知区域",
+                        m -> m.get("count"),
+                        (a, b) -> a));
         result.put("byLocation", byLocation);
+
         return result;
     }
 }

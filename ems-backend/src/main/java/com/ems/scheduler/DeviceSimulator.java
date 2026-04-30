@@ -30,11 +30,17 @@ public class DeviceSimulator {
     @Value("${ems.mqtt.enabled:false}")
     private boolean mqttEnabled;
 
+    @Value("${ems.simulator.enabled:false}")
+    private boolean simulatorEnabled;
+
     /**
-     * 每30秒模拟设备上报数据（仅在没有真实MQTT时使用）
+     * 每30秒模拟设备上报数据（仅在模拟器启用且没有真实MQTT时使用）
      */
     @Scheduled(fixedRate = 30000)
     public void simulateDeviceData() {
+        if (!simulatorEnabled) {
+            return; // 模拟器未启用
+        }
         if (mqttEnabled) {
             return; // MQTT 已启用，不需要模拟
         }

@@ -33,6 +33,8 @@ ems:
     expiration: 86400000
   upload:
     path: ./uploads
+  simulator:
+    enabled: false
   mqtt:
     enabled: false  # 默认关闭，有MQTT Broker时改为true
     broker-url: tcp://localhost:1883
@@ -40,3 +42,12 @@ ems:
     username:
     password:
     topic: ems/device/#
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: when-authorized

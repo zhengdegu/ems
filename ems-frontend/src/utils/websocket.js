@@ -11,7 +11,8 @@ class WebSocketClient {
   }
 
   connect(onConnected) {
-    const socket = new SockJS('/ws')
+    const token = localStorage.getItem('ems_token') || ''
+    const socket = new SockJS('/ws?token=' + encodeURIComponent(token))
     this.stompClient = Stomp.over(socket)
     this.stompClient.debug = null // 关闭调试日志
 

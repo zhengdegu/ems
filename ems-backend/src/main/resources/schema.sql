@@ -65,7 +65,8 @@ CREATE TABLE IF NOT EXISTS equipment (
   create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (id),
-  UNIQUE KEY uk_code (code)
+  UNIQUE KEY uk_code (code),
+  KEY idx_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='设备表';
 
 -- ============================================
@@ -84,11 +85,14 @@ CREATE TABLE IF NOT EXISTS work_order (
   assignee VARCHAR(50) DEFAULT NULL COMMENT '执行人',
   creator VARCHAR(50) DEFAULT NULL COMMENT '创建人',
   deadline DATETIME DEFAULT NULL COMMENT '截止时间',
+  source_plan_id BIGINT DEFAULT NULL COMMENT '来源维护计划ID',
   create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (id),
   KEY idx_equipment_id (equipment_id),
-  KEY idx_status (status)
+  KEY idx_status (status),
+  KEY idx_create_time (create_time),
+  KEY idx_source_plan_id (source_plan_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='工单表';
 
 -- ============================================
@@ -132,7 +136,8 @@ CREATE TABLE IF NOT EXISTS alarm (
   PRIMARY KEY (id),
   KEY idx_equipment_id (equipment_id),
   KEY idx_status (status),
-  KEY idx_level (level)
+  KEY idx_level (level),
+  KEY idx_create_time (create_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='告警表';
 
 -- ============================================
