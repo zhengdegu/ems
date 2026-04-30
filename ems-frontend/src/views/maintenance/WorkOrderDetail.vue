@@ -1,9 +1,9 @@
 <template>
-  <div>
+  <div v-loading="loading">
     <el-page-header @back="$router.back()" style="margin-bottom:16px">
       <template #content><span style="font-size:16px;font-weight:600">工单详情 - {{ order.code }}</span></template>
       <template #extra>
-        <el-button type="primary">接单处理</el-button>
+        <el-button type="primary" v-if="order.status === '待接单'" @click="handleAccept">接单处理</el-button>
         <el-button>转派</el-button>
       </template>
     </el-page-header>
@@ -17,16 +17,16 @@
             <el-descriptions-item label="工单编号">{{ order.code }}</el-descriptions-item>
             <el-descriptions-item label="工单标题">{{ order.title }}</el-descriptions-item>
             <el-descriptions-item label="工单类型">
-              <el-tag type="danger" size="small">{{ order.type }}</el-tag>
+              <el-tag :type="order.type === '故障维修' ? 'danger' : 'primary'" size="small">{{ order.type }}</el-tag>
             </el-descriptions-item>
             <el-descriptions-item label="优先级">
-              <el-tag type="danger" size="small" effect="plain">{{ order.priority }}</el-tag>
+              <el-tag :type="order.priority === '紧急' ? 'danger' : order.priority === '高' ? 'warning' : 'info'" size="small" effect="plain">{{ order.priority }}</el-tag>
             </el-descriptions-item>
-            <el-descriptions-item label="关联设备">{{ order.equipment }}</el-descriptions-item>
+            <el-descriptions-item label="关联设备">{{ order.equipmentName }}</el-descriptions-item>
             <el-descriptions-item label="负责人">{{ order.assignee }}</el-descriptions-item>
             <el-descriptions-item label="创建时间">{{ order.createTime }}</el-descriptions-item>
             <el-descriptions-item label="状态">
-              <el-tag type="warning" size="small">{{ order.status }}</el-tag>
+              <el-tag :type="order.status === '处理中' ? 'warning' : order.status === '已完成' ? 'success' : 'info'" size="small">{{ order.status }}</el-tag>
             </el-descriptions-item>
           </el-descriptions>
           <div style="margin-top:16px">
@@ -58,7 +58,7 @@
             <el-table-column prop="cost" label="费用" width="80" />
           </el-table>
           <div style="text-align:right;margin-top:12px;font-weight:600;color:#333">
-            合计：¥{{ parts.reduce((s, p) => s + parseFloat(p.cost), 0).toFixed(2) }}
+            合计：¥{{ parts.reduce((s, p) => s + parseFloat(p.cost.replace(/,/g, '')), 0).toFixed(2) }}
           </div>
         </el-card>
 
@@ -80,14 +80,15 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import { getWorkOrderDetail, updateWorkOrderStatus } from '../../api/workOrder'
 
-const order = ref({
-  id: 1, code: 'WO-20240308-001', title: 'CNC-001 主轴温度异常维修',
-  type: '故障维修', priority: '紧急', equipment: 'CNC-001 五轴数控加工中心',
-  assignee: '张工', status: '处理中', createTime: '2024-03-08 09:30',
-  description: '设备运行过程中主轴温度持续升高，已达92°C，超过安全阈值（85°C）。初步判断可能是冷却系统故障或轴承磨损导致。需要立即停机检修，避免造成更大损失。'
-})
+const route = useRoute()
+const loading = ref(false)
+
+const order = ref({})
 
 const timeline = [
   { time: '2024-03-08 09:30', title: '工单创建', desc: '系统自动创建紧急维修工单', operator: '系统', type: 'primary' },
@@ -106,4 +107,34 @@ const workHours = [
   { person: '张工', hours: 3, content: '故障排查与维修' },
   { person: '王工', hours: 1.5, content: '协助拆装' },
 ]
+
+async function loadDetail() {
+  const id = route.params.id
+  if (!id) return
+  loading.value = true
+  try {
+    const res = await getWorkOrderDetail(id)
+    if (res.code === 200 && res.data) {
+      order.value = res.data
+    }
+  } catch {
+    ElMessage.error('加载工单详情失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+async function handleAccept() {
+  try {
+    const res = await updateWorkOrderStatus(order.value.id, '处理中')
+    if (res.code === 200) {
+      ElMessage.success('已接单')
+      loadDetail()
+    }
+  } catch {
+    ElMessage.error('操作失败')
+  }
+}
+
+onMounted(loadDetail)
 </script>

@@ -36,6 +36,7 @@ export default {
     workOrder: 'Work Order',
     workOrderDetail: 'Work Order Detail',
     alarm: 'Alarm Center',
+    sparePart: 'Spare Parts',
     report: 'Report',
     userManage: 'User Management',
     rolePermission: 'Role & Permission',

@@ -16,10 +16,10 @@
         </el-form-item>
         <el-form-item :label="$t('equipment.type')">
           <el-select v-model="query.type" :placeholder="$t('common.all')" clearable>
-            <el-option :label="$t('equipment.cnc')" value="cnc" />
-            <el-option :label="$t('equipment.robot')" value="robot" />
-            <el-option :label="$t('equipment.conveyor')" value="conveyor" />
-            <el-option :label="$t('equipment.plc')" value="plc" />
+            <el-option :label="$t('equipment.cnc')" value="数控机床" />
+            <el-option :label="$t('equipment.robot')" value="工业机器人" />
+            <el-option :label="$t('equipment.conveyor')" value="输送设备" />
+            <el-option :label="$t('equipment.plc')" value="PLC控制器" />
           </el-select>
         </el-form-item>
         <el-form-item>
@@ -43,23 +43,22 @@
       </div>
 
       <!-- 表格 -->
-      <el-table :data="tableData" @selection-change="handleSelectionChange" stripe>
+      <el-table :data="tableData" @selection-change="handleSelectionChange" stripe v-loading="loading">
         <el-table-column type="selection" width="50" />
         <el-table-column prop="code" :label="$t('equipment.code')" width="130" />
         <el-table-column prop="name" :label="$t('equipment.name')" min-width="150" />
-        <el-table-column prop="type" :label="$t('equipment.type')" width="120">
-          <template #default="{ row }">{{ $t(`equipment.${typeMap[row.type]}`) }}</template>
-        </el-table-column>
+        <el-table-column prop="type" :label="$t('equipment.type')" width="120" />
         <el-table-column prop="model" :label="$t('equipment.model')" width="140" />
         <el-table-column prop="location" :label="$t('equipment.location')" width="130" />
         <el-table-column prop="status" :label="$t('equipment.status')" width="100">
           <template #default="{ row }">
-            <el-tag :type="statusMap[row.status]?.type" size="small">{{ $t(`equipment.${row.status}`) }}</el-tag>
+            <el-tag :type="statusMap[row.status]?.type" size="small">{{ statusLabel[row.status] || row.status }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="healthScore" :label="$t('equipment.healthScore')" width="100">
           <template #default="{ row }">
-            <el-progress :percentage="row.healthScore" :color="row.healthScore > 80 ? '#52c41a' : row.healthScore > 60 ? '#faad14' : '#ff4d4f'" :stroke-width="6" />
+            <el-progress v-if="row.healthScore != null" :percentage="row.healthScore" :color="row.healthScore > 80 ? '#52c41a' : row.healthScore > 60 ? '#faad14' : '#ff4d4f'" :stroke-width="6" />
+            <span v-else style="color:#999">--</span>
           </template>
         </el-table-column>
         <el-table-column :label="$t('common.operation')" width="200" fixed="right">
@@ -90,6 +89,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
+import { getEquipmentList, deleteEquipment } from '../../api/equipment'
 
 const { t } = useI18n()
 
@@ -100,47 +100,66 @@ const statusMap = {
   scrapped: { type: 'danger' }
 }
 
-const typeMap = {
-  '数控机床': 'cnc',
-  '工业机器人': 'robot',
-  '输送设备': 'conveyor',
-  'PLC控制器': 'plc'
+const statusLabel = {
+  running: '运行中',
+  stopped: '停机',
+  maintenance: '维修中',
+  scrapped: '已报废'
 }
 
 const query = reactive({ name: '', status: '', type: '', page: 1, pageSize: 10 })
 const tableData = ref([])
 const total = ref(0)
 const selectedRows = ref([])
+const loading = ref(false)
 
-const mockData = [
-  { id: 1, code: 'CNC-001', name: '五轴数控加工中心', type: '数控机床', model: 'DMG MORI DMU 50', location: 'A区-生产线', status: 'running', healthScore: 92 },
-  { id: 2, code: 'CNC-002', name: '数控车床', type: '数控机床', model: 'MAZAK QT-250', location: 'A区-生产线', status: 'running', healthScore: 88 },
-  { id: 3, code: 'ROBOT-001', name: '焊接机器人', type: '工业机器人', model: 'FANUC R-2000iC', location: 'B区-装配线', status: 'running', healthScore: 95 },
-  { id: 4, code: 'ROBOT-005', name: '搬运机器人', type: '工业机器人', model: 'KUKA KR 210', location: 'C区-仓储', status: 'maintenance', healthScore: 45 },
-  { id: 5, code: 'PLC-003', name: 'PLC控制器', type: 'PLC控制器', model: 'Siemens S7-1500', location: 'A区-生产线', status: 'stopped', healthScore: 60 },
-  { id: 6, code: 'CONV-008', name: '皮带输送机', type: '输送设备', model: 'Hytrol TA', location: 'C区-仓储', status: 'running', healthScore: 72 },
-  { id: 7, code: 'CNC-003', name: '龙门加工中心', type: '数控机床', model: 'Haas VF-6SS', location: 'A区-生产线', status: 'running', healthScore: 85 },
-  { id: 8, code: 'PUMP-012', name: '液压泵站', type: '输送设备', model: 'Parker PV270', location: 'D区-检测', status: 'running', healthScore: 68 },
-]
-
-function loadData() {
-  let filtered = [...mockData]
-  if (query.name) filtered = filtered.filter(d => d.name.includes(query.name))
-  if (query.status) filtered = filtered.filter(d => d.status === query.status)
-  if (query.type) {
-    const typeKey = Object.keys(typeMap).find(k => typeMap[k] === query.type)
-    if (typeKey) filtered = filtered.filter(d => d.type === typeKey)
+async function loadData() {
+  loading.value = true
+  try {
+    const res = await getEquipmentList({
+      page: query.page,
+      pageSize: query.pageSize,
+      keyword: query.name || undefined,
+      status: query.status || undefined,
+      type: query.type || undefined
+    })
+    if (res.code === 200 && res.data) {
+      tableData.value = res.data.records || []
+      total.value = res.data.total || 0
+    }
+  } catch {
+    ElMessage.error('加载设备列表失败')
+  } finally {
+    loading.value = false
   }
-  total.value = filtered.length
-  const start = (query.page - 1) * query.pageSize
-  tableData.value = filtered.slice(start, start + query.pageSize)
 }
 
 function handleSearch() { query.page = 1; loadData() }
 function resetQuery() { Object.assign(query, { name: '', status: '', type: '', page: 1 }); loadData() }
 function handleSelectionChange(rows) { selectedRows.value = rows }
-function handleDelete(row) { ElMessage.success(t('message.deleted', { name: row.name })); loadData() }
-function handleBatchDelete() { ElMessage.success(t('message.batchDeleted', { count: selectedRows.value.length })); loadData() }
+
+async function handleDelete(row) {
+  try {
+    await deleteEquipment(row.id)
+    ElMessage.success(t('message.deleted', { name: row.name }))
+    loadData()
+  } catch {
+    ElMessage.error('删除失败')
+  }
+}
+
+async function handleBatchDelete() {
+  try {
+    for (const row of selectedRows.value) {
+      await deleteEquipment(row.id)
+    }
+    ElMessage.success(t('message.batchDeleted', { count: selectedRows.value.length }))
+    loadData()
+  } catch {
+    ElMessage.error('批量删除失败')
+  }
+}
+
 function handleExport() { ElMessage.success(t('message.exportSuccess')) }
 
 onMounted(loadData)

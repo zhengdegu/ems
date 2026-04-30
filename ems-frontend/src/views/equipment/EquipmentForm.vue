@@ -5,7 +5,7 @@
     </el-page-header>
 
     <el-card shadow="never">
-      <el-form ref="formRef" :model="form" :rules="rules" label-width="100px" style="max-width:800px">
+      <el-form ref="formRef" :model="form" :rules="rules" label-width="100px" style="max-width:800px" v-loading="loading">
         <el-divider content-position="left">基本信息</el-divider>
         <el-row :gutter="20">
           <el-col :span="12">
@@ -44,7 +44,7 @@
           </el-col>
           <el-col :span="12">
             <el-form-item label="出厂日期">
-              <el-date-picker v-model="form.manufactureDate" type="date" placeholder="选择日期" style="width:100%" />
+              <el-date-picker v-model="form.manufactureDate" type="date" placeholder="选择日期" style="width:100%" value-format="YYYY-MM-DD" />
             </el-form-item>
           </el-col>
         </el-row>
@@ -73,7 +73,7 @@
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item label="采购日期">
-              <el-date-picker v-model="form.purchaseDate" type="date" placeholder="选择日期" style="width:100%" />
+              <el-date-picker v-model="form.purchaseDate" type="date" placeholder="选择日期" style="width:100%" value-format="YYYY-MM-DD" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
@@ -88,7 +88,7 @@
         </el-form-item>
 
         <el-form-item>
-          <el-button type="primary" @click="handleSubmit">{{ isEdit ? '保存修改' : '提交' }}</el-button>
+          <el-button type="primary" :loading="submitting" @click="handleSubmit">{{ isEdit ? '保存修改' : '提交' }}</el-button>
           <el-button @click="$router.back()">取消</el-button>
         </el-form-item>
       </el-form>
@@ -97,13 +97,16 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { createEquipment, updateEquipment, getEquipmentDetail } from '../../api/equipment'
 
 const route = useRoute()
 const router = useRouter()
 const formRef = ref()
+const loading = ref(false)
+const submitting = ref(false)
 const isEdit = computed(() => !!route.params.id)
 
 const form = reactive({
@@ -120,9 +123,49 @@ const rules = {
   location: [{ required: true, message: '请选择所在位置', trigger: 'change' }]
 }
 
+async function loadDetail() {
+  const id = route.params.id
+  if (!id) return
+  loading.value = true
+  try {
+    const res = await getEquipmentDetail(id)
+    if (res.code === 200 && res.data) {
+      Object.assign(form, res.data)
+    }
+  } catch {
+    ElMessage.error('加载设备信息失败')
+  } finally {
+    loading.value = false
+  }
+}
+
 async function handleSubmit() {
   await formRef.value?.validate()
-  ElMessage.success(isEdit.value ? '修改成功' : '新增成功')
-  router.back()
+  submitting.value = true
+  try {
+    if (isEdit.value) {
+      const res = await updateEquipment(route.params.id, form)
+      if (res.code === 200) {
+        ElMessage.success('修改成功')
+        router.back()
+      } else {
+        ElMessage.error(res.message || '修改失败')
+      }
+    } else {
+      const res = await createEquipment(form)
+      if (res.code === 200) {
+        ElMessage.success('新增成功')
+        router.back()
+      } else {
+        ElMessage.error(res.message || '新增失败')
+      }
+    }
+  } catch {
+    ElMessage.error('操作失败')
+  } finally {
+    submitting.value = false
+  }
 }
+
+onMounted(loadDetail)
 </script>

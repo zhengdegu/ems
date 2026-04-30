@@ -36,6 +36,7 @@ export default {
     workOrder: '工单管理',
     workOrderDetail: '工单详情',
     alarm: '告警中心',
+    sparePart: '备件库存',
     report: '报表统计',
     userManage: '用户管理',
     rolePermission: '角色权限',

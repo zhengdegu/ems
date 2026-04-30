@@ -26,6 +26,7 @@ const routes = [
       { path: 'work-order', name: 'work-order', component: () => import('../views/maintenance/WorkOrder.vue'), meta: { title: '工单管理', icon: 'Document' } },
       { path: 'work-order-detail/:id?', name: 'work-order-detail', component: () => import('../views/maintenance/WorkOrderDetail.vue'), meta: { title: '工单详情', icon: 'DocumentChecked' } },
       { path: 'alarm', name: 'alarm', component: () => import('../views/monitor/Alarm.vue'), meta: { title: '告警中心', icon: 'Bell' } },
+      { path: 'spare-part', name: 'spare-part', component: () => import('../views/sparePart/SparePartList.vue'), meta: { title: '备件管理', icon: 'Box' } },
       { path: 'report', name: 'report', component: () => import('../views/analysis/Report.vue'), meta: { title: '报表统计', icon: 'DataAnalysis' } },
       { path: 'user-manage', name: 'user-manage', component: () => import('../views/system/UserManage.vue'), meta: { title: '用户管理', icon: 'User' } },
       { path: 'role-permission', name: 'role-permission', component: () => import('../views/system/RolePermission.vue'), meta: { title: '角色权限', icon: 'Lock' } },

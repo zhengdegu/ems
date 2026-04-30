@@ -1,5 +1,5 @@
 <template>
-  <div>
+  <div v-loading="loading">
     <el-page-header @back="$router.back()" style="margin-bottom:16px">
       <template #content><span style="font-size:16px;font-weight:600">设备详情 - {{ equipment.name }}</span></template>
       <template #extra>
@@ -22,7 +22,7 @@
         <el-descriptions-item label="责任人">{{ equipment.responsible }}</el-descriptions-item>
         <el-descriptions-item label="状态">
           <el-tag :type="equipment.status === 'running' ? 'success' : equipment.status === 'maintenance' ? 'warning' : 'info'" size="small">
-            {{ { running: '运行中', stopped: '停机', maintenance: '维修中' }[equipment.status] }}
+            {{ { running: '运行中', stopped: '停机', maintenance: '维修中' }[equipment.status] || equipment.status }}
           </el-tag>
         </el-descriptions-item>
       </el-descriptions>
@@ -64,9 +64,9 @@
       <!-- 生命周期 -->
       <el-tab-pane label="生命周期" name="lifecycle">
         <el-steps :active="3" align-center>
-          <el-step title="采购入库" description="2020-03-15" />
-          <el-step title="安装调试" description="2020-04-01" />
-          <el-step title="投入使用" description="2020-04-10" />
+          <el-step title="采购入库" :description="equipment.purchaseDate || ''" />
+          <el-step title="安装调试" description="" />
+          <el-step title="投入使用" :description="equipment.manufactureDate || ''" />
           <el-step title="运行中" description="至今" />
           <el-step title="报废" description="" />
         </el-steps>
@@ -89,15 +89,16 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import { getEquipmentDetail } from '../../api/equipment'
 
+const route = useRoute()
 const activeTab = ref('params')
+const loading = ref(false)
 
-const equipment = ref({
-  id: 1, code: 'CNC-001', name: '五轴数控加工中心', type: '数控机床',
-  model: 'DMG MORI DMU 50', manufacturer: 'DMG MORI', manufactureDate: '2020-01-15',
-  location: 'A区-生产线', responsible: '张工', status: 'running'
-})
+const equipment = ref({})
 
 const runParams = [
   { label: '主轴转速', value: '8,500', unit: 'RPM', color: '#1890FF' },
@@ -117,4 +118,35 @@ const documents = [
   { name: '维护保养规程.docx', type: 'Word', size: '3.2MB', uploadTime: '2020-04-05' },
   { name: '电气原理图.dwg', type: 'CAD', size: '8.7MB', uploadTime: '2020-04-01' }
 ]
+
+async function loadDetail() {
+  const id = route.params.id
+  if (!id) return
+  loading.value = true
+  try {
+    const res = await getEquipmentDetail(id)
+    if (res.code === 200 && res.data) {
+      equipment.value = res.data
+      // 更新健康评分
+      if (res.data.healthScore != null) {
+        runParams[3].value = String(res.data.healthScore)
+      }
+    }
+  } catch {
+    ElMessage.error('加载设备详情失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(loadDetail)
 </script>
+
+<style scoped>
+.stat-card {
+  background: #fff;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+</style>

@@ -1,6 +1,6 @@
 <template>
   <div>
-    <el-card shadow="never">
+    <el-card shadow="never" v-loading="loading">
       <el-tabs v-model="activeTab">
         <el-tab-pane label="基本设置" name="basic">
           <el-form :model="basicForm" label-width="120px" style="max-width:600px">
@@ -25,7 +25,7 @@
               </el-select>
             </el-form-item>
             <el-form-item>
-              <el-button type="primary" @click="saveBasic">保存设置</el-button>
+              <el-button type="primary" :loading="saving" @click="saveBasic">保存设置</el-button>
             </el-form-item>
           </el-form>
         </el-tab-pane>
@@ -49,7 +49,7 @@
               <el-switch v-model="alarmForm.autoCreateOrder" />
             </el-form-item>
             <el-form-item>
-              <el-button type="primary" @click="saveAlarm">保存设置</el-button>
+              <el-button type="primary" :loading="saving" @click="saveAlarm">保存设置</el-button>
             </el-form-item>
           </el-form>
         </el-tab-pane>
@@ -70,7 +70,7 @@
               <el-input-number v-model="backupForm.keepCount" :min="1" :max="30" />
             </el-form-item>
             <el-form-item>
-              <el-button type="primary" @click="saveBackup">保存设置</el-button>
+              <el-button type="primary" :loading="saving" @click="saveBackup">保存设置</el-button>
               <el-button @click="manualBackup">立即备份</el-button>
             </el-form-item>
           </el-form>
@@ -81,17 +81,93 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
+import { getSystemSettings, batchSaveSettings } from '../../api/system'
 
 const activeTab = ref('basic')
+const loading = ref(false)
+const saving = ref(false)
 
 const basicForm = reactive({ systemName: '设备管理系统', language: 'zh-CN', timezone: 'Asia/Shanghai' })
 const alarmForm = reactive({ tempThreshold: 85, vibrationThreshold: 10.0, notifyMethods: ['站内消息', '邮件'], autoCreateOrder: true })
 const backupForm = reactive({ autoBackup: true, cycle: 'daily', keepCount: 7 })
 
-function saveBasic() { ElMessage.success('基本设置已保存') }
-function saveAlarm() { ElMessage.success('告警设置已保存') }
-function saveBackup() { ElMessage.success('备份设置已保存') }
+async function loadSettings() {
+  loading.value = true
+  try {
+    const res = await getSystemSettings()
+    if (res.code === 200 && res.data) {
+      const settings = {}
+      const list = Array.isArray(res.data) ? res.data : (res.data.records || [])
+      list.forEach(s => { settings[s.settingKey] = s.settingValue })
+      if (settings['system.name']) basicForm.systemName = settings['system.name']
+      if (settings['system.language']) basicForm.language = settings['system.language']
+      if (settings['system.timezone']) basicForm.timezone = settings['system.timezone']
+      if (settings['alarm.temp_threshold']) alarmForm.tempThreshold = Number(settings['alarm.temp_threshold'])
+      if (settings['alarm.vibration_threshold']) alarmForm.vibrationThreshold = Number(settings['alarm.vibration_threshold'])
+      if (settings['alarm.auto_notify']) alarmForm.autoCreateOrder = settings['alarm.auto_notify'] === 'true'
+    }
+  } catch {
+    // 使用默认值
+  } finally {
+    loading.value = false
+  }
+}
+
+async function saveBasic() {
+  saving.value = true
+  try {
+    const res = await batchSaveSettings({
+      'system.name': basicForm.systemName,
+      'system.language': basicForm.language,
+      'system.timezone': basicForm.timezone
+    })
+    if (res.code === 200) ElMessage.success('基本设置已保存')
+    else ElMessage.error(res.message || '保存失败')
+  } catch {
+    ElMessage.error('保存失败')
+  } finally {
+    saving.value = false
+  }
+}
+
+async function saveAlarm() {
+  saving.value = true
+  try {
+    const res = await batchSaveSettings({
+      'alarm.temp_threshold': String(alarmForm.tempThreshold),
+      'alarm.vibration_threshold': String(alarmForm.vibrationThreshold),
+      'alarm.notify_methods': alarmForm.notifyMethods.join(','),
+      'alarm.auto_notify': String(alarmForm.autoCreateOrder)
+    })
+    if (res.code === 200) ElMessage.success('告警设置已保存')
+    else ElMessage.error(res.message || '保存失败')
+  } catch {
+    ElMessage.error('保存失败')
+  } finally {
+    saving.value = false
+  }
+}
+
+async function saveBackup() {
+  saving.value = true
+  try {
+    const res = await batchSaveSettings({
+      'backup.auto': String(backupForm.autoBackup),
+      'backup.cycle': backupForm.cycle,
+      'backup.keep_count': String(backupForm.keepCount)
+    })
+    if (res.code === 200) ElMessage.success('备份设置已保存')
+    else ElMessage.error(res.message || '保存失败')
+  } catch {
+    ElMessage.error('保存失败')
+  } finally {
+    saving.value = false
+  }
+}
+
 function manualBackup() { ElMessage.success('备份任务已启动') }
+
+onMounted(loadSettings)
 </script>

@@ -33,6 +33,7 @@
 import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { register } from '../api/auth'
 
 const router = useRouter()
 const formRef = ref()
@@ -55,9 +56,15 @@ async function handleRegister() {
   await formRef.value?.validate()
   loading.value = true
   try {
-    await new Promise(r => setTimeout(r, 500))
-    ElMessage.success('注册成功，请登录')
-    router.push('/login')
+    const res = await register({ username: form.username, name: form.name, password: form.password })
+    if (res.code === 200) {
+      ElMessage.success('注册成功，请登录')
+      router.push('/login')
+    } else {
+      ElMessage.error(res.message || '注册失败')
+    }
+  } catch (e) {
+    ElMessage.error('注册失败，请检查网络')
   } finally {
     loading.value = false
   }

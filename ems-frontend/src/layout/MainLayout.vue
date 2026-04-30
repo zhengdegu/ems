@@ -137,6 +137,9 @@ const menuGroups = [
   { label: '监控预警', items: [
     { label: '告警中心', name: 'alarm', icon: 'Bell', i18nKey: 'alarm' }
   ]},
+  { label: '备件管理', items: [
+    { label: '备件库存', name: 'spare-part', icon: 'Box', i18nKey: 'sparePart' }
+  ]},
   { label: '数据分析', items: [
     { label: '报表统计', name: 'report', icon: 'DataAnalysis', i18nKey: 'report' }
   ]},

@@ -7,17 +7,18 @@
           <template #header>
             <div style="display:flex;justify-content:space-between;align-items:center">
               <span style="font-weight:600">角色列表</span>
-              <el-button type="primary" size="small" @click="showRoleDialog = true"><el-icon><Plus /></el-icon> 新增</el-button>
+              <el-button type="primary" size="small" @click="openRoleDialog"><el-icon><Plus /></el-icon> 新增</el-button>
             </div>
           </template>
-          <el-table :data="roles" highlight-current-row @current-change="handleRoleChange" stripe>
+          <el-table :data="roles" highlight-current-row @current-change="handleRoleChange" stripe v-loading="loading">
             <el-table-column prop="name" label="角色名称" />
             <el-table-column prop="code" label="角色编码" width="130" />
-            <el-table-column prop="userCount" label="用户数" width="80" />
             <el-table-column label="操作" width="100">
-              <template #default>
-                <el-button link type="primary" size="small">编辑</el-button>
-                <el-button link type="danger" size="small">删除</el-button>
+              <template #default="{ row }">
+                <el-button link type="primary" size="small" @click.stop="handleEditRole(row)">编辑</el-button>
+                <el-popconfirm title="确定删除该角色？" @confirm="handleDeleteRole(row)">
+                  <template #reference><el-button link type="danger" size="small">删除</el-button></template>
+                </el-popconfirm>
               </template>
             </el-table-column>
           </el-table>
@@ -45,36 +46,34 @@
       </el-col>
     </el-row>
 
-    <el-dialog v-model="showRoleDialog" title="新增角色" width="400px">
+    <el-dialog v-model="showRoleDialog" :title="editingRole ? '编辑角色' : '新增角色'" width="400px">
       <el-form :model="roleForm" label-width="80px">
         <el-form-item label="角色名称"><el-input v-model="roleForm.name" /></el-form-item>
         <el-form-item label="角色编码"><el-input v-model="roleForm.code" /></el-form-item>
-        <el-form-item label="描述"><el-input v-model="roleForm.desc" type="textarea" :rows="2" /></el-form-item>
+        <el-form-item label="描述"><el-input v-model="roleForm.description" type="textarea" :rows="2" /></el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="showRoleDialog = false">取消</el-button>
-        <el-button type="primary" @click="showRoleDialog = false">确定</el-button>
+        <el-button type="primary" :loading="submitting" @click="handleRoleSubmit">确定</el-button>
       </template>
     </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
+import { getRoleList, createRole, updateRole, deleteRole } from '../../api/user'
 
 const treeRef = ref()
 const showRoleDialog = ref(false)
 const currentRole = ref(null)
 const checkedKeys = ref([])
-const roleForm = reactive({ name: '', code: '', desc: '' })
-
-const roles = ref([
-  { id: 1, name: '管理员', code: 'admin', userCount: 2 },
-  { id: 2, name: '设备主管', code: 'supervisor', userCount: 3 },
-  { id: 3, name: '维修工程师', code: 'engineer', userCount: 8 },
-  { id: 4, name: '操作员', code: 'operator', userCount: 15 },
-])
+const loading = ref(false)
+const submitting = ref(false)
+const editingRole = ref(null)
+const roleForm = reactive({ name: '', code: '', description: '' })
+const roles = ref([])
 
 const permissionTree = [
   { id: 'dashboard', label: '工作台', children: [
@@ -107,19 +106,94 @@ const permissionTree = [
   ]}
 ]
 
-const rolePermissions = {
-  1: ['dashboard:view', 'equipment:view', 'equipment:create', 'equipment:edit', 'equipment:delete', 'equipment:export', 'maintenance:plan', 'maintenance:order', 'maintenance:create', 'alarm:view', 'alarm:handle', 'report:view', 'report:export', 'system:user', 'system:role', 'system:settings'],
-  2: ['dashboard:view', 'equipment:view', 'equipment:create', 'equipment:edit', 'equipment:export', 'maintenance:plan', 'maintenance:order', 'maintenance:create', 'alarm:view', 'alarm:handle', 'report:view', 'report:export'],
-  3: ['dashboard:view', 'equipment:view', 'maintenance:order', 'maintenance:create', 'alarm:view', 'alarm:handle'],
-  4: ['dashboard:view', 'equipment:view', 'alarm:view']
+async function loadRoles() {
+  loading.value = true
+  try {
+    const res = await getRoleList({ page: 1, size: 100 })
+    if (res.code === 200 && res.data) {
+      roles.value = res.data.records || res.data || []
+    }
+  } catch {
+    ElMessage.error('加载角色列表失败')
+  } finally {
+    loading.value = false
+  }
 }
 
 function handleRoleChange(role) {
   currentRole.value = role
-  checkedKeys.value = rolePermissions[role?.id] || []
+  if (role?.permissions) {
+    try {
+      checkedKeys.value = JSON.parse(role.permissions)
+    } catch {
+      checkedKeys.value = []
+    }
+  } else {
+    checkedKeys.value = []
+  }
 }
 
-function savePermissions() {
-  ElMessage.success('权限保存成功')
+function openRoleDialog() {
+  editingRole.value = null
+  Object.assign(roleForm, { name: '', code: '', description: '' })
+  showRoleDialog.value = true
 }
+
+function handleEditRole(row) {
+  editingRole.value = row
+  Object.assign(roleForm, { name: row.name, code: row.code, description: row.description })
+  showRoleDialog.value = true
+}
+
+async function handleRoleSubmit() {
+  submitting.value = true
+  try {
+    if (editingRole.value) {
+      const res = await updateRole(editingRole.value.id, roleForm)
+      if (res.code === 200) ElMessage.success('修改成功')
+      else ElMessage.error(res.message || '修改失败')
+    } else {
+      const res = await createRole(roleForm)
+      if (res.code === 200) ElMessage.success('创建成功')
+      else ElMessage.error(res.message || '创建失败')
+    }
+    showRoleDialog.value = false
+    loadRoles()
+  } catch {
+    ElMessage.error('操作失败')
+  } finally {
+    submitting.value = false
+  }
+}
+
+async function handleDeleteRole(row) {
+  try {
+    await deleteRole(row.id)
+    ElMessage.success('删除成功')
+    if (currentRole.value?.id === row.id) {
+      currentRole.value = null
+      checkedKeys.value = []
+    }
+    loadRoles()
+  } catch {
+    ElMessage.error('删除失败')
+  }
+}
+
+async function savePermissions() {
+  const checked = treeRef.value.getCheckedKeys(false)
+  try {
+    const res = await updateRole(currentRole.value.id, { permissions: JSON.stringify(checked) })
+    if (res.code === 200) {
+      ElMessage.success('权限保存成功')
+      loadRoles()
+    } else {
+      ElMessage.error(res.message || '保存失败')
+    }
+  } catch {
+    ElMessage.error('保存失败')
+  }
+}
+
+onMounted(loadRoles)
 </script>
